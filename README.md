@@ -1,2 +1,2 @@
 # VoxOverlay-Translator
-Pending
+Pending (to be continued)
