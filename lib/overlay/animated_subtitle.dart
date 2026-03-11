@@ -1,3 +1,4 @@
+// animated_subtitle.dart
 import 'package:flutter/material.dart';
 
 class AnimatedSubtitle extends StatelessWidget {

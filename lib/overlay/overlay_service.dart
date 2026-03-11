@@ -1,49 +1,81 @@
+// overlay_service.dart
+import 'dart:developer' as dev;
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 
 class OverlayService {
-
-  // Check if overlay permission is granted
+  /// Check if overlay permission is granted
   static Future<bool> hasPermission() async {
     return await FlutterOverlayWindow.isPermissionGranted();
   }
 
-  // Request overlay permission
+  /// Request overlay permission from the user
   static Future<void> requestPermission() async {
     await FlutterOverlayWindow.requestPermission();
   }
 
-  // Start overlay window
+  /// Start the overlay window
   static Future<void> startOverlay() async {
-
-    bool permission = await hasPermission();
-
-    if (!permission) {
-      await requestPermission();
-      permission = await hasPermission();
+    try {
+      bool permission = await hasPermission();
 
       if (!permission) {
-        throw Exception("Overlay permission not granted");
+        await requestPermission();
+        permission = await hasPermission();
+        if (!permission) {
+          dev.log("Overlay permission denied by user", name: 'OverlayService');
+          return;
+        }
       }
+
+      bool isActive = await FlutterOverlayWindow.isActive();
+      if (isActive) return;
+
+      await FlutterOverlayWindow.showOverlay(
+        enableDrag: true,
+        overlayTitle: "VoxOverlay",
+        overlayContent: "Listening...",
+        alignment: OverlayAlignment.center,
+        height: 200, // Slightly increased to accommodate multi-line translations
+        width: 400,  // Slightly wider for readability
+        flag: OverlayFlag.defaultFlag,
+      );
+
+      dev.log("Overlay window started", name: 'OverlayService');
+    } catch (e, stackTrace) {
+      dev.log("Error starting overlay", name: 'OverlayService', error: e, stackTrace: stackTrace);
     }
-
-    await FlutterOverlayWindow.showOverlay(
-      enableDrag: true,
-      overlayTitle: "VoxOverlay Translate",
-      overlayContent: "Running",
-      alignment: OverlayAlignment.center,
-      height: 120,
-      width: 300,
-      flag: OverlayFlag.defaultFlag,
-    );
   }
 
-  // Stop overlay window
+  /// Stop the overlay window
   static Future<void> stopOverlay() async {
-    await FlutterOverlayWindow.closeOverlay();
+    try {
+      bool active = await FlutterOverlayWindow.isActive();
+      if (!active) return;
+
+      await FlutterOverlayWindow.closeOverlay();
+      dev.log("Overlay window closed", name: 'OverlayService');
+    } catch (e, stackTrace) {
+      dev.log("Error closing overlay", name: 'OverlayService', error: e, stackTrace: stackTrace);
+    }
   }
 
-  // Update subtitle text in overlay
-  static Future<void> updateSubtitle(String text) async {
-    await FlutterOverlayWindow.shareData(text);
+  /// Send subtitle text to the overlay
+  /// Renamed to showSubtitle to match AudioPipelineService calls
+  static Future<void> showSubtitle(String text) async {
+    if (text.trim().isEmpty) return;
+
+    try {
+      bool active = await FlutterOverlayWindow.isActive();
+      if (!active) {
+        // Optional: Auto-start overlay if it's not active
+        await startOverlay();
+      }
+
+      // Sends data to the overlay entry point
+      await FlutterOverlayWindow.shareData(text);
+      dev.log("Sent to overlay: $text", name: 'OverlayService');
+    } catch (e, stackTrace) {
+      dev.log("Error updating subtitle", name: 'OverlayService', error: e, stackTrace: stackTrace);
+    }
   }
 }
