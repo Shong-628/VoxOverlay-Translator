@@ -1,0 +1,16 @@
+{
+  "@@locale": "en",
+  "settings": "Settings",
+  "language": "Language",
+  "sourceLanguage": "Source Language",
+  "targetLanguage": "Target Language",
+  "subtitlePreview": "Subtitle Preview",
+  "appearance": "Appearance",
+  "fontSize": "Font Size",
+  "backgroundOpacity": "Background Opacity",
+  "textColor": "Text Color",
+  "backgroundColor": "Background Color",
+  "generalSettings": "General Settings",
+  "appDisplayLanguage": "App Display Language",
+  "darkMode": "Dark Mode"
+}

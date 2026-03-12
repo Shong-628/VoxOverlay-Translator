@@ -1,0 +1,16 @@
+{
+  "@@locale": "zh",
+  "settings": "设置",
+  "language": "语言",
+  "sourceLanguage": "源语言",
+  "targetLanguage": "目标语言",
+  "subtitlePreview": "字幕预览",
+  "appearance": "外观",
+  "fontSize": "字体大小",
+  "backgroundOpacity": "背景透明度",
+  "textColor": "文字颜色",
+  "backgroundColor": "背景颜色",
+  "generalSettings": "常规设置",
+  "appDisplayLanguage": "应用显示语言",
+  "darkMode": "深色模式"
+}

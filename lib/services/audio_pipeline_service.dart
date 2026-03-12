@@ -16,14 +16,15 @@ class AudioPipelineService {
   final AudioRecorder _recorder = AudioRecorder();
 
   bool _running = false;
-  String sourceLang = "en";
-  String targetLang = "ms";
 
   bool get isRunning => _running;
 
   Future<void> initialize() async {
     await _whisperService.initialize();
-    await _translationService.loadModel(sourceLang, targetLang);
+
+    // Notice we removed _translationService.loadModel()
+    // ML Kit handles its own initialization dynamically when translate() is called.
+
     dev.log("Pipeline initialized", name: 'AudioPipeline');
   }
 
@@ -53,6 +54,7 @@ class AudioPipelineService {
         }
 
         // TRANSLATION
+        // This will automatically check DB preferences and download ML Kit models if needed
         final translated = await _translationService.translate(transcript);
 
         // UI
@@ -67,7 +69,8 @@ class AudioPipelineService {
 
   void stopPipeline() {
     _running = false;
-    _whisperService.dispose(); // This triggers the auto-stop and file cleanup
+    _whisperService.dispose();
+    _translationService.dispose(); // Crucial: Free up Google ML Kit resources
     dev.log("Audio pipeline stopped", name: 'AudioPipeline');
   }
 

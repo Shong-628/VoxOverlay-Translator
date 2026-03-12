@@ -1,7 +1,10 @@
 // home_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter_overlay_window/flutter_overlay_window.dart'; // Added for shareData
 import '../overlay/overlay_service.dart';
 import 'settings_screen.dart';
+import '../db/database_helper.dart'; // Added for SQLite
+import '../models/user_preference.dart'; // Added for preference model
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -31,8 +34,14 @@ class HomeScreen extends StatelessWidget {
         }
       }
 
-      // Start overlay
+      // 1. Start overlay (ensure your OverlayService sets width/height to matchParent)
       await OverlayService.startOverlay();
+
+      // 2. Fetch the user's saved preferences from SQLite
+      UserPreference mySavedPrefs = await DatabaseHelper.instance.getPreferences();
+
+      // 3. Push the preferences to the overlay isolate instantly
+      await FlutterOverlayWindow.shareData(mySavedPrefs.toMap());
 
     } catch (e) {
       debugPrint("Overlay start error: $e");

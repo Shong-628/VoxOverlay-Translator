@@ -1,0 +1,16 @@
+{
+  "@@locale": "ms",
+  "settings": "Tetapan",
+  "language": "Bahasa",
+  "sourceLanguage": "Bahasa Sumber",
+  "targetLanguage": "Bahasa Sasaran",
+  "subtitlePreview": "Pratonton Sarikata",
+  "appearance": "Penampilan",
+  "fontSize": "Saiz Fon",
+  "backgroundOpacity": "Ketelusan Latar",
+  "textColor": "Warna Teks",
+  "backgroundColor": "Warna Latar",
+  "generalSettings": "Tetapan Umum",
+  "appDisplayLanguage": "Bahasa Paparan Aplikasi",
+  "darkMode": "Mod Gelap"
+}

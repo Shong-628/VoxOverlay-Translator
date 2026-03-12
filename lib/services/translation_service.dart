@@ -1,33 +1,94 @@
 // translation_service.dart
+// translation_service.dart
 import 'dart:developer' as dev;
-import 'package:argos_translator_offline/argos_translate_dart.dart';
-// import 'package:argos_translator_offline/bindings.dart';
+import 'package:google_mlkit_translation/google_mlkit_translation.dart';
+import '../db/database_helper.dart';
 
 class TranslationService {
-  String _sourceLang = "en";
-  String _targetLang = "ms";
+  OnDeviceTranslator? _translator;
+  final _modelManager = OnDeviceTranslatorModelManager();
 
-  /// Initialize and set language pairs
-  Future<void> loadModel(String sourceLang, String targetLang) async {
-    // We store these to determine if we need a pivot translation later
-    _sourceLang = sourceLang;
-    _targetLang = targetLang;
+  // Track current pair to avoid re-initializing the engine unnecessarily
+  String _currentSourcePref = "";
+  String _currentTargetPref = "";
 
-    dev.log("Translation service configured for: $sourceLang -> $targetLang", name: 'TranslationService');
+  /// Maps your database/UI strings to Google ML Kit's TranslateLanguage Enums
+  TranslateLanguage _mapLanguageToEnum(String languageName) {
+    switch (languageName.toLowerCase()) {
+      case 'english':
+        return TranslateLanguage.english;
+      case 'malay':
+        return TranslateLanguage.malay;
+      case 'chinese':
+        return TranslateLanguage.chinese;
+    // Note: ML Kit Translation doesn't support 'Auto' natively in the translator instance.
+    // To support 'Auto', you would use the separate `google_mlkit_language_id` package first.
+    // For now, defaulting to English to prevent crashes.
+      case 'auto':
+        return TranslateLanguage.english;
+      default:
+        return TranslateLanguage.english;
+    }
   }
 
-  /// Translate text with pivot logic for Malay <-> Chinese
+  /// Checks if models exist on device, and downloads them if they don't.
+  Future<void> _ensureModelsDownloaded(TranslateLanguage source, TranslateLanguage target) async {
+    final bool isSourceDownloaded = await _modelManager.isModelDownloaded(source.bcpCode);
+    final bool isTargetDownloaded = await _modelManager.isModelDownloaded(target.bcpCode);
+
+    if (!isSourceDownloaded) {
+      dev.log("Downloading source model: ${source.name}...", name: 'TranslationService');
+      await _modelManager.downloadModel(source.bcpCode);
+    }
+
+    if (!isTargetDownloaded) {
+      dev.log("Downloading target model: ${target.name}...", name: 'TranslationService');
+      await _modelManager.downloadModel(target.bcpCode);
+    }
+  }
+
+  /// Translates the text based on current DB preferences
   Future<String> translate(String text) async {
     if (text.isEmpty) return "";
 
     try {
-      // Logic: Malay to Chinese (or vice versa) requires English as a pivot
-      if (_isPivotRequired(_sourceLang, _targetLang)) {
-        return await _translateWithPivot(text, _sourceLang, _targetLang);
+      // 1. Fetch latest preferences
+      final prefs = await DatabaseHelper.instance.getPreferences();
+      final sourcePref = prefs.sourceLanguageCode;
+      final targetPref = prefs.targetLanguageCode;
+
+      // 2. Early Exits
+      if (targetPref.toLowerCase() == 'none' || sourcePref.toLowerCase() == targetPref.toLowerCase()) {
+        return text;
       }
 
-      // Direct translation for other pairs
-      return await _directTranslate(text, _sourceLang, _targetLang);
+      // 3. Convert string preferences to ML Kit enums
+      final sourceLang = _mapLanguageToEnum(sourcePref);
+      final targetLang = _mapLanguageToEnum(targetPref);
+
+      // 4. Initialize or Update the Translator ONLY if the language pair changed
+      if (_translator == null || _currentSourcePref != sourcePref || _currentTargetPref != targetPref) {
+
+        // Close old translator to free up memory before making a new one
+        _translator?.close();
+
+        // Make sure the ML models are on the device (requires internet the very first time)
+        await _ensureModelsDownloaded(sourceLang, targetLang);
+
+        _translator = OnDeviceTranslator(
+          sourceLanguage: sourceLang,
+          targetLanguage: targetLang,
+        );
+
+        _currentSourcePref = sourcePref;
+        _currentTargetPref = targetPref;
+        dev.log("Translator initialized for: ${sourceLang.name} -> ${targetLang.name}", name: 'TranslationService');
+      }
+
+      // 5. Direct translation (ML Kit handles pivoting internally!)
+      final String result = await _translator!.translateText(text);
+      return result;
+
     } catch (e, stackTrace) {
       dev.log(
         "Translation error",
@@ -35,30 +96,12 @@ class TranslationService {
         error: e,
         stackTrace: stackTrace,
       );
-      return text; // Fallback to original text on error
+      return text;
     }
   }
 
-  /// Check if the language pair requires a pivot through English
-  bool _isPivotRequired(String source, String target) {
-    return (source == "ms" && target == "zh") || (source == "zh" && target == "ms");
-  }
-
-  /// Handles the MS -> EN -> ZH or ZH -> EN -> MS flow
-  Future<String> _translateWithPivot(String text, String from, String to) async {
-    dev.log("Using English as pivot for $from to $to", name: 'TranslationService');
-
-    // Step 1: Translate source to English
-    final String pivotText = await _directTranslate(text, from, "en");
-
-    // Step 2: Translate English to target
-    return await _directTranslate(pivotText, "en", to);
-  }
-
-  /// Wrapper for the static library call
-  Future<String> _directTranslate(String text, String from, String to) async {
-    // Based on your sample: ArgosTranslate.translate(original, fromLang, toLang)
-    final result = await ArgosTranslate.translate(text, from, to);
-    return result ?? text;
+  /// Clean up resources when your app closes or the service is destroyed
+  void dispose() {
+    _translator?.close();
   }
 }

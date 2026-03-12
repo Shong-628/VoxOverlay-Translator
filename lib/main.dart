@@ -2,11 +2,15 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
+import 'package:provider/provider.dart'; // ADD
 import 'screens/onboarding_screen.dart';
 import 'screens/settings_screen.dart';
 import 'services/audio_pipeline_service.dart';
 import 'overlay/overlay_entry.dart';
 import 'screens/home_screen.dart';
+import 'services/settings_controller.dart'; // ADD
+import 'package:flutter_localizations/flutter_localizations.dart';
+import '../l10n/app_localizations.dart';
 
 // Global keys and services
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
@@ -26,6 +30,10 @@ void main() async {
 
   // Initialize the audio pipeline
   await audioPipelineService.initialize();
+
+  // Initialize global settings controller
+  final settingsController = SettingsController();
+  await settingsController.loadSettings();
 
   // Listen for actions sent FROM the Overlay bubble TO the Main App
   FlutterOverlayWindow.overlayListener.listen((data) {
@@ -54,7 +62,12 @@ void main() async {
     }
   });
 
-  runApp(const VoxOverlayApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => settingsController,
+      child: const VoxOverlayApp(),
+    ),
+  );
 }
 
 class VoxOverlayApp extends StatelessWidget {
@@ -62,12 +75,34 @@ class VoxOverlayApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<SettingsController>();
+
     return MaterialApp(
       navigatorKey: navigatorKey, // Required for the settings navigation to work
       title: 'VoxOverlay Translator',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(primarySwatch: Colors.blue),
-      home: const HomeScreen(), // From your home_screen.dart
+
+      // THEME CONTROL
+      theme: ThemeData.light(),
+      darkTheme: ThemeData.dark(),
+      themeMode: settings.themeMode,
+
+      // LANGUAGE CONTROL
+      locale: settings.locale,
+      supportedLocales: const [
+        Locale("en"),
+        Locale("ms"),
+        Locale("zh"),
+      ],
+
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+
+      home: const HomeScreen(),
     );
   }
 }

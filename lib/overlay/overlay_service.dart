@@ -31,12 +31,10 @@ class OverlayService {
       if (isActive) return;
 
       await FlutterOverlayWindow.showOverlay(
-        enableDrag: true,
-        overlayTitle: "VoxOverlay",
-        height: 500, // Increased to give space for the wheel
-        width: 500,  // Increased to give space for the wheel
+        width: WindowSize.matchParent,
+        height: WindowSize.matchParent,
         alignment: OverlayAlignment.center,
-        flag: OverlayFlag.defaultFlag,
+        enableDrag: false, // Flutter handles the dragging now!
       );
 
       dev.log("Overlay window started", name: 'OverlayService');

@@ -2,7 +2,6 @@
 import 'dart:io';
 import 'dart:developer' as dev;
 import 'dart:typed_data';
-import 'package:flutter/services.dart';
 import 'package:whisper_ggml/whisper_ggml.dart';
 
 class WhisperService {
@@ -21,17 +20,16 @@ class WhisperService {
       final modelPath = await _whisperController.getPath(_model);
       final modelFile = File(modelPath);
 
+      // If the file isn't on the device yet, download it from the internet
       if (!await modelFile.exists()) {
-        final data = await rootBundle.load('assets/ggml-${_model.modelName}.bin');
-        await modelFile.writeAsBytes(
-          data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
-        );
+        dev.log("Downloading Whisper model, this may take a moment...", name: 'WhisperService');
+        await _whisperController.downloadModel(_model);
       }
+
       _initialized = true;
+      dev.log("Whisper initialized successfully.", name: 'WhisperService');
     } catch (e) {
-      dev.log("Model initialization failed", name: 'WhisperService', error: e);
-      await _whisperController.downloadModel(_model);
-      _initialized = true;
+      dev.log("Failed to initialize or download Whisper model", name: 'WhisperService', error: e);
     }
   }
 
