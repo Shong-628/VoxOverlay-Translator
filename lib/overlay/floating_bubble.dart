@@ -7,7 +7,7 @@ import '../models/user_preference.dart';
 
 class FloatingBubble extends StatefulWidget {
   final String text;
-  final UserPreference prefs; // Accept preferences from parent
+  final UserPreference prefs;
 
   const FloatingBubble({
     super.key,
@@ -22,54 +22,69 @@ class FloatingBubble extends StatefulWidget {
 class _FloatingBubbleState extends State<FloatingBubble> {
   bool expanded = false;
   bool isPlaying = true;
-  bool isDragging = false;
 
-  Offset? position;
-  final double bubbleRadius = 30.0; // Fixed radius for the drag handle
+  final double bubbleRadius = 30.0;
+  final double menuRadius = 80.0;
 
-  void _handleAction(String action) {
-    FlutterOverlayWindow.shareData({"action": action});
-    if (action == 'close') FlutterOverlayWindow.closeOverlay();
-    if (action == 'toggle') setState(() => isPlaying = !isPlaying);
-    setState(() => expanded = false);
-  }
+  @override
+  void didUpdateWidget(FloatingBubble oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    bool wasEmpty = oldWidget.text.trim().isEmpty;
+    bool isEmpty = widget.text.trim().isEmpty;
 
-  List<double> get _dynamicAngles {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
-    if (position == null) return [-pi / 2, 0, pi / 2, pi];
-
-    final double px = position!.dx;
-    final double py = position!.dy;
-    final double menuRadius = 130.0;
-
-    bool nearLeft = px < menuRadius;
-    bool nearRight = screenWidth - px < menuRadius;
-    bool nearTop = py < menuRadius;
-    bool nearBottom = screenHeight - py < menuRadius;
-
-    double startA = 0;
-    double endA = 2 * pi;
-
-    if (nearLeft && nearTop) { startA = 0; endA = pi / 2; }
-    else if (nearRight && nearTop) { startA = pi / 2; endA = pi; }
-    else if (nearRight && nearBottom) { startA = pi; endA = 3 * pi / 2; }
-    else if (nearLeft && nearBottom) { startA = 3 * pi / 2; endA = 2 * pi; }
-    else if (nearLeft) { startA = -pi / 2; endA = pi / 2; }
-    else if (nearRight) { startA = pi / 2; endA = 3 * pi / 2; }
-    else if (nearTop) { startA = 0; endA = pi; }
-    else if (nearBottom) { startA = -pi; endA = 0; }
-    else { return [-pi / 2, 0, pi / 2, pi]; }
-
-    List<double> angles = [];
-    double step = (endA - startA) / 3;
-    for (int i = 0; i < 4; i++) {
-      angles.add(startA + (step * i));
+    if (wasEmpty != isEmpty) {
+      _updateWindowSize();
     }
-    return angles;
   }
 
-  // Determines which icon should appear in the center bubble
+  Future<void> _updateWindowSize() async {
+    if (expanded) {
+      await FlutterOverlayWindow.resizeOverlay(280, 280, true);
+    } else if (widget.text.trim().isNotEmpty) {
+      await FlutterOverlayWindow.resizeOverlay(WindowSize.matchParent, 160, true);
+    } else {
+      await FlutterOverlayWindow.resizeOverlay(100, 100, true);
+    }
+  }
+
+  void _handleAction(String action) async {
+    FlutterOverlayWindow.shareData({"action": action});
+
+    if (action == 'close') {
+      FlutterOverlayWindow.closeOverlay();
+      return;
+    }
+
+    if (action == 'toggle') setState(() => isPlaying = !isPlaying);
+
+    _collapseMenu();
+  }
+
+  // --- NEW MENU LOGIC WITH ANIMATION TIMING ---
+  void _toggleMenu() {
+    if (expanded) {
+      _collapseMenu();
+    } else {
+      _expandMenu();
+    }
+  }
+
+  void _expandMenu() {
+    setState(() => expanded = true);
+    // Expand window instantly so the outward animation has room to show
+    _updateWindowSize();
+  }
+
+  void _collapseMenu() async {
+    setState(() => expanded = false);
+    // Wait for the buttons to animate back to the center BEFORE shrinking the window
+    await Future.delayed(const Duration(milliseconds: 300));
+    // Only shrink if the user hasn't re-opened the menu during the wait
+    if (!expanded && mounted) {
+      _updateWindowSize();
+    }
+  }
+
   IconData _getCenterIcon() {
     if (expanded) return Icons.close;
     return isPlaying ? Icons.translate : Icons.pause;
@@ -77,105 +92,52 @@ class _FloatingBubbleState extends State<FloatingBubble> {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
-
-    position ??= Offset(screenWidth / 2, screenHeight - 150);
-
-    // Determines if we have more space on the left side of the screen
-    final bool showSubtitleOnLeft = position!.dx > (screenWidth / 2);
-    final double spacing = 12.0; // Space between bubble and subtitle
-
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: SizedBox(
-        width: screenWidth,
-        height: screenHeight,
+      // FIX 1: SizedBox.expand forces the Stack to fill the entire Android Window size.
+      // This guarantees your expanded buttons will be inside the bounds and clickable.
+      body: SizedBox.expand(
         child: Stack(
           clipBehavior: Clip.none,
+          alignment: Alignment.center,
           children: [
-            // 1. Menu Buttons
-            ..._buildDynamicMenuButtons(),
+            ..._buildRadialMenu(),
 
-            // 2. The dynamic Subtitle Box
-            AnimatedPositioned(
-              duration: isDragging ? Duration.zero : const Duration(milliseconds: 150),
-              curve: Curves.easeOut,
-              top: position!.dy, // Anchored to the vertical center of the bubble
-
-              // Anchor logic based on available space
-              left: showSubtitleOnLeft ? null : position!.dx + bubbleRadius + spacing,
-              right: showSubtitleOnLeft ? screenWidth - position!.dx + bubbleRadius + spacing : null,
-
-              child: FractionalTranslation(
-                translation: const Offset(0, -0.5), // Perfectly centers it vertically against the top anchor
-                child: Container(
-                  constraints: BoxConstraints(
-                    // Dynamically limit max width so it forces a text wrap before hitting the screen edge
-                    maxWidth: showSubtitleOnLeft
-                        ? (position!.dx - bubbleRadius - spacing - 16).clamp(0.0, double.infinity)
-                        : (screenWidth - position!.dx - bubbleRadius - spacing - 16).clamp(0.0, double.infinity),
-                  ),
-                  child: expanded
-                      ? const SizedBox.shrink() // Hide subtitles when menu is open
-                      : AnimatedSubtitle(
-                    text: widget.text,
-                    prefs: widget.prefs,
+            if (!expanded && widget.text.trim().isNotEmpty)
+              Transform.translate(
+                offset: const Offset(120, 0),
+                child: IgnorePointer(
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 200),
+                    child: AnimatedSubtitle(
+                      text: widget.text,
+                      prefs: widget.prefs,
+                    ),
                   ),
                 ),
               ),
-            ),
 
-            // 3. The Core Drag Bubble
-            AnimatedPositioned(
-              duration: isDragging ? Duration.zero : const Duration(milliseconds: 150),
-              left: position!.dx - bubbleRadius,
-              top: position!.dy - bubbleRadius,
-              child: GestureDetector(
-                onPanStart: (_) => setState(() => isDragging = true),
-                onPanEnd: (_) => setState(() => isDragging = false),
-                onPanUpdate: (details) {
-                  setState(() {
-                    position = Offset(
-                      (position!.dx + details.delta.dx).clamp(bubbleRadius + 10, screenWidth - bubbleRadius - 10),
-                      (position!.dy + details.delta.dy).clamp(bubbleRadius + 10, screenHeight - bubbleRadius - 10),
-                    );
-                  });
-                },
-                onLongPress: () => setState(() => expanded = !expanded),
-                onTap: () { if (expanded) setState(() => expanded = false); },
-
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  width: bubbleRadius * 2,
-                  height: bubbleRadius * 2,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.9),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white24, width: 2),
-                    boxShadow: const [
-                      BoxShadow(color: Colors.black45, blurRadius: 8, offset: Offset(0, 4))
-                    ],
-                  ),
-                  child: Center(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 280),
-                      transitionBuilder: (child, animation) {
-                        final rotate = Tween<double>(begin: 0.8, end: 1).animate(animation);
-                        return RotationTransition(
-                          turns: rotate,
-                          child: ScaleTransition(
-                            scale: animation,
-                            child: child,
-                          ),
-                        );
-                      },
-                      child: Icon(
-                        _getCenterIcon(),
-                        key: ValueKey(_getCenterIcon()),
-                        color: Colors.white,
-                        size: 28,
-                      ),
+            GestureDetector(
+              // FIX 2: Replaced onLongPress with onTap
+              onTap: _toggleMenu,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                width: bubbleRadius * 2,
+                height: bubbleRadius * 2,
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.9),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white24, width: 2),
+                  boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 8)],
+                ),
+                child: Center(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 280),
+                    child: Icon(
+                      _getCenterIcon(),
+                      key: ValueKey(_getCenterIcon()),
+                      color: Colors.white,
+                      size: 28,
                     ),
                   ),
                 ),
@@ -187,8 +149,7 @@ class _FloatingBubbleState extends State<FloatingBubble> {
     );
   }
 
-  List<Widget> _buildDynamicMenuButtons() {
-    final angles = _dynamicAngles;
+  List<Widget> _buildRadialMenu() {
     final actions = [
       {'icon': Icons.settings, 'label': 'settings'},
       {'icon': isPlaying ? Icons.pause : Icons.play_arrow, 'label': 'toggle'},
@@ -196,48 +157,41 @@ class _FloatingBubbleState extends State<FloatingBubble> {
       {'icon': Icons.compress, 'label': 'minimize'},
     ];
 
+    final angles = [-pi / 2, 0.0, pi / 2, pi];
+
     return List.generate(4, (index) {
-      return _buildMenuButton(
-        actions[index]['icon'] as IconData,
-        angles[index],
-        actions[index]['label'] as String,
-        index,
-      );
-    });
-  }
+      double distance = expanded ? menuRadius : 0.0;
+      double dx = distance * cos(angles[index]);
+      double dy = distance * sin(angles[index]);
 
-  Widget _buildMenuButton(IconData icon, double angle, String label, int index) {
-    double distance = expanded ? 90.0 : 0.0;
+      // FIX 4: Determine rotation. Spins from -180 degrees (-pi) to 0 (upright).
+      double rotation = expanded ? 0.0 : -pi;
 
-    double dx = position!.dx + (distance * cos(angle));
-    double dy = position!.dy + (distance * sin(angle));
-
-    return AnimatedPositioned(
-      duration: isDragging ? Duration.zero : const Duration(milliseconds: 350),
-      curve: isDragging ? Curves.linear : Curves.elasticOut,
-      left: dx - 24,
-      top: dy - 24,
-      child: AnimatedOpacity(
-        duration: Duration(milliseconds: 150 + (index * 60)), // iOS-style stagger
-        opacity: expanded ? 1.0 : 0.0,
-        child: AnimatedScale(
-          scale: expanded ? 1.0 : 0.4,
-          duration: Duration(milliseconds: 180 + (index * 60)), // stagger pop
-          curve: Curves.easeOutBack,
+      // FIX 3: Replaced Transform.translate with AnimatedContainer(transform: ...)
+      return AnimatedContainer(
+        // Add a slight stagger so the buttons fan out nicely
+        duration: Duration(milliseconds: 200 + (index * 40)),
+        curve: Curves.easeOutBack, // Gives a great physical "pop" and bounce
+        // We use the cascade operator (..) to apply rotation directly after translation
+        transform: Matrix4.translationValues(dx, dy, 0)..rotateZ(rotation),
+        // Ensure it rotates from the center of the button, not the top-left corner
+        alignment: Alignment.center,
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 200),
+          opacity: expanded ? 1.0 : 0.0,
           child: IgnorePointer(
             ignoring: !expanded,
             child: IconButton.filled(
-              onPressed: () => _handleAction(label),
-              icon: Icon(icon, color: Colors.white),
+              onPressed: () => _handleAction(actions[index]['label'] as String),
+              icon: Icon(actions[index]['icon'] as IconData, color: Colors.white),
               style: IconButton.styleFrom(
                 backgroundColor: Colors.deepPurple,
-                shadowColor: Colors.black,
-                elevation: 4,
+                padding: const EdgeInsets.all(12),
               ),
             ),
           ),
         ),
-      ),
-    );
+      );
+    });
   }
 }

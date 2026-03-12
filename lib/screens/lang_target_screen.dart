@@ -55,6 +55,8 @@ class _LangTargetScreenState extends State<LangTargetScreen> {
     });
 
     Future.delayed(const Duration(milliseconds: 500), () {
+      // FIX: Ensure the widget is still on screen before popping
+      if (!mounted) return;
       Navigator.pop(context, language);
     });
   }

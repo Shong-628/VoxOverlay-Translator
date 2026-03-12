@@ -31,10 +31,11 @@ class OverlayService {
       if (isActive) return;
 
       await FlutterOverlayWindow.showOverlay(
-        width: WindowSize.matchParent,
-        height: WindowSize.matchParent,
+        height: 200, // Small height
+        width: 200,  // Small width
         alignment: OverlayAlignment.center,
-        enableDrag: false, // Flutter handles the dragging now!
+        flag: OverlayFlag.defaultFlag,
+        enableDrag: true,
       );
 
       dev.log("Overlay window started", name: 'OverlayService');

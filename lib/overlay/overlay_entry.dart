@@ -61,7 +61,8 @@ class _OverlayAppState extends State<OverlayApp> {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.transparent,
+      // Ensure the material itself doesn't have a solid color
+      type: MaterialType.transparency,
       // Note: We removed the Center() widget here because our new FloatingBubble
       // is designed to take over the full screen and manage its own coordinates.
       child: FloatingBubble(

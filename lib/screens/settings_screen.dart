@@ -57,8 +57,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _userPrefs = prefs;
       sourceLanguage = prefs.sourceLanguageCode;
       targetLanguage = prefs.targetLanguageCode;
-      fontSize = prefs.fontSizeScale;
-      opacity = prefs.overlayOpacity;
+
+      // Clamped values to prevent Slider assertion errors
+      fontSize = prefs.fontSizeScale.clamp(12.0, 30.0);
+      opacity = prefs.overlayOpacity.clamp(20, 100);
+
       textColorHex = prefs.textColorHex;
       bgColorHex = prefs.bgColorHex;
 
