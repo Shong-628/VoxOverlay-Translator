@@ -33,10 +33,9 @@ class OverlayService {
       await FlutterOverlayWindow.showOverlay(
         enableDrag: true,
         overlayTitle: "VoxOverlay",
-        overlayContent: "Listening...",
+        height: 500, // Increased to give space for the wheel
+        width: 500,  // Increased to give space for the wheel
         alignment: OverlayAlignment.center,
-        height: 200, // Slightly increased to accommodate multi-line translations
-        width: 400,  // Slightly wider for readability
         flag: OverlayFlag.defaultFlag,
       );
 

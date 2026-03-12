@@ -3,52 +3,39 @@ import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'floating_bubble.dart';
 
-@pragma("vm:entry-point")
-void overlayMain() {
-  runApp(const OverlayApp());
+// Rename this to something internal or keep it as overlayMain
+// as long as main.dart knows where to find it.
+void runOverlayApp() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: OverlayApp(),
+  ));
 }
 
-class OverlayApp extends StatelessWidget {
+class OverlayApp extends StatefulWidget {
   const OverlayApp({super.key});
-
   @override
-  Widget build(BuildContext context) {
-
-    return const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: OverlayScreen(),
-    );
-  }
+  State<OverlayApp> createState() => _OverlayAppState();
 }
 
-class OverlayScreen extends StatefulWidget {
-  const OverlayScreen({super.key});
-
-  @override
-  State<OverlayScreen> createState() => _OverlayScreenState();
-}
-
-class _OverlayScreenState extends State<OverlayScreen> {
-
+class _OverlayAppState extends State<OverlayApp> {
   String subtitle = "Listening...";
 
   @override
   void initState() {
     super.initState();
-
+    // Listen for data from the main app
     FlutterOverlayWindow.overlayListener.listen((data) {
-
-      setState(() {
-        subtitle = data;
-      });
-
+      if (data != null) {
+        setState(() => subtitle = data.toString());
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-
-    return Material(
+    return Material( // Use Material or Scaffold with transparent bg
       color: Colors.transparent,
       child: Center(
         child: FloatingBubble(text: subtitle),

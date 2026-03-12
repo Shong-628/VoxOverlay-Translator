@@ -1,49 +1,55 @@
+// main.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/settings_screen.dart';
-import 'overlay/subtitle_overlay_screen.dart';
 import 'services/audio_pipeline_service.dart';
+import 'overlay/overlay_entry.dart';
+import 'screens/home_screen.dart';
 
-// Global keys and services for easy access from the listener
+// Global keys and services
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final AudioPipelineService audioPipelineService = AudioPipelineService();
 
-/// This is the entry point for the overlay process
+// 2. Ensure this is exactly as named in the plugin's expectations
+// The @pragma ensures the function isn't "cleaned away" during release builds.
 @pragma("vm:entry-point")
 void overlayMain() {
-  WidgetsFlutterBinding.ensureInitialized();
-  runApp(
-    const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: SubtitleOverlay(),
-    ),
-  );
+  // This calls the function you defined in overlay_entry.dart
+  // Make sure the function name matches exactly.
+  runOverlayApp();
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize the audio pipeline service
+  // Initialize the audio pipeline
   await audioPipelineService.initialize();
 
-  // Inside your Main App's initialization
+  // Listen for actions sent FROM the Overlay bubble TO the Main App
   FlutterOverlayWindow.overlayListener.listen((data) {
     if (data is Map && data.containsKey('action')) {
-      switch (data['action']) {
+      final String action = data['action'];
+
+      switch (action) {
         case 'toggle':
-          // logic to start/stop AudioPipelineService
           audioPipelineService.togglePipeline();
           break;
+
         case 'settings':
-          // Use a navigation key to open settings or bring app to front
+        // Navigate to settings screen
           navigatorKey.currentState?.push(
             MaterialPageRoute(builder: (_) => const SettingsScreen()),
           );
           break;
+
         case 'close':
-          exit(0); // Terminate app
+          exit(0);
+
+        case 'minimize':
+        // Optional: Add logic here if you want to hide the overlay
+          break;
       }
     }
   });
@@ -57,14 +63,11 @@ class VoxOverlayApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      navigatorKey: navigatorKey,
+      navigatorKey: navigatorKey, // Required for the settings navigation to work
       title: 'VoxOverlay Translator',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        useMaterial3: true,
-      ),
-      home: const OnboardingScreen(),
+      theme: ThemeData(primarySwatch: Colors.blue),
+      home: const HomeScreen(), // From your home_screen.dart
     );
   }
 }

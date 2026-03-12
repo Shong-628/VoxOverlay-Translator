@@ -1,5 +1,7 @@
+// whisper_service.dart
 import 'dart:io';
-import 'dart:developer' as dev; // Import the developer log
+import 'dart:developer' as dev;
+import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:whisper_ggml/whisper_ggml.dart';
 
@@ -8,8 +10,12 @@ class WhisperService {
   final WhisperModel _model = WhisperModel.base;
   bool _initialized = false;
 
+  // Track files currently being processed to delete them if we force-stop
+  final Set<String> _activeFiles = {};
+  bool _isDisposed = false;
+
   Future<void> initialize() async {
-    if (_initialized) return;
+    if (_initialized || _isDisposed) return;
 
     try {
       final modelPath = await _whisperController.getPath(_model);
@@ -21,15 +27,9 @@ class WhisperService {
           data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
         );
       }
-
       _initialized = true;
-    } catch (e, stackTrace) {
-      dev.log(
-          "Asset load failed, attempting download",
-          name: 'WhisperService',
-          error: e,
-          stackTrace: stackTrace
-      );
+    } catch (e) {
+      dev.log("Model initialization failed", name: 'WhisperService', error: e);
       await _whisperController.downloadModel(_model);
       _initialized = true;
     }
@@ -37,23 +37,141 @@ class WhisperService {
 
   Future<String> transcribe(String audioPath) async {
     if (!_initialized) await initialize();
+    if (_isDisposed) return "";
+
+    String? convertedWavPath;
+    String transcriptionResult = "";
+
+    // Register files for tracking
+    _activeFiles.add(audioPath);
 
     try {
+      String finalPath = audioPath;
+
+      // 1. Handle PCM conversion
+      if (audioPath.endsWith('.pcm')) {
+        convertedWavPath = await _convertPcmToWav(audioPath);
+        if (convertedWavPath != null) {
+          _activeFiles.add(convertedWavPath);
+          finalPath = convertedWavPath;
+        }
+      }
+
+      // Check if we stopped during conversion
+      if (_isDisposed) return "";
+
+      // 2. Perform Transcription
       final result = await _whisperController.transcribe(
         model: _model,
-        audioPath: audioPath,
+        audioPath: finalPath,
         lang: 'en',
       );
 
-      return result?.transcription.text ?? "";
-    } catch (e, stackTrace) {
-      dev.log(
-          "Whisper transcription error",
-          name: 'WhisperService',
-          error: e,
-          stackTrace: stackTrace
-      );
-      return "";
+      transcriptionResult = result?.transcription.text ?? "";
+
+    } catch (e) {
+      dev.log("Whisper transcription error", name: 'WhisperService', error: e);
+    } finally {
+      // 3. Immediate Cleanup
+      await _deleteFile(audioPath);
+      _activeFiles.remove(audioPath);
+
+      if (convertedWavPath != null) {
+        await _deleteFile(convertedWavPath);
+        _activeFiles.remove(convertedWavPath);
+      }
+    }
+
+    return transcriptionResult;
+  }
+
+  /// Force stop and emergency cleanup
+  Future<void> dispose() async {
+    _isDisposed = true;
+    dev.log("Disposing WhisperService, cleaning active files...", name: 'WhisperService');
+
+    // Create a copy of the set to avoid concurrent modification errors
+    final filesToRemove = Set<String>.from(_activeFiles);
+    for (var path in filesToRemove) {
+      await _deleteFile(path);
+    }
+    _activeFiles.clear();
+  }
+
+  Future<void> _deleteFile(String path) async {
+    try {
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+        dev.log("Deleted temporary file: $path", name: 'WhisperService');
+      }
+    } catch (e) {
+      // Ignore errors if file is already gone
+    }
+  }
+
+  Future<String?> _convertPcmToWav(String pcmPath) async {
+    try {
+      final File pcmFile = File(pcmPath);
+      final wavPath = pcmPath.replaceAll('.pcm', '.wav');
+
+      if (!await pcmFile.exists()) return null;
+
+      final Uint8List pcmBytes = await pcmFile.readAsBytes();
+
+      if (_isDisposed) return null;
+
+      const int sampleRate = 16000;
+      const int channels = 1;
+      const int bitDepth = 16;
+      const int bytesPerSample = bitDepth ~/ 8;
+      const int byteRate = sampleRate * channels * bytesPerSample;
+
+      final ByteData header = ByteData(44);
+
+      // RIFF header
+      header.setUint8(0, 0x52); // 'R'
+      header.setUint8(1, 0x49); // 'I'
+      header.setUint8(2, 0x46); // 'F'
+      header.setUint8(3, 0x46); // 'F'
+      header.setUint32(4, 36 + pcmBytes.length, Endian.little);
+      header.setUint8(8, 0x57); // 'W'
+      header.setUint8(9, 0x41); // 'A'
+      header.setUint8(10, 0x56); // 'V'
+      header.setUint8(11, 0x45); // 'E'
+
+      // fmt chunk
+      header.setUint8(12, 0x66); // 'f'
+      header.setUint8(13, 0x6D); // 'm'
+      header.setUint8(14, 0x74); // 't'
+      header.setUint8(15, 0x20); // ' ' (Space) - FIXED: was setUint15
+      header.setUint32(16, 16, Endian.little); // Subchunk1Size
+      header.setUint16(20, 1, Endian.little);  // AudioFormat (1 = PCM)
+      header.setUint16(22, channels, Endian.little);
+      header.setUint32(24, sampleRate, Endian.little);
+      header.setUint32(28, byteRate, Endian.little);
+      header.setUint16(32, channels * bytesPerSample, Endian.little); // BlockAlign
+      header.setUint16(34, bitDepth, Endian.little); // BitsPerSample
+
+      // data chunk
+      header.setUint8(36, 0x64); // 'd'
+      header.setUint8(37, 0x61); // 'a'
+      header.setUint8(38, 0x74); // 't'
+      header.setUint8(39, 0x61); // 'a'
+      header.setUint32(40, pcmBytes.length, Endian.little);
+
+      final File wavFile = File(wavPath);
+      final Uint8List wavBytes = Uint8List(44 + pcmBytes.length);
+
+      // Combine header and PCM data
+      wavBytes.setAll(0, header.buffer.asUint8List());
+      wavBytes.setAll(44, pcmBytes);
+
+      await wavFile.writeAsBytes(wavBytes);
+      return wavPath;
+    } catch (e) {
+      dev.log("PCM conversion failed", name: 'WhisperService', error: e);
+      return null;
     }
   }
 }

@@ -2,16 +2,26 @@ package com.shong.voxoverlay_translator
 
 import android.media.*
 import android.media.projection.MediaProjection
-import java.io.File
-import java.io.FileOutputStream
-import java.io.RandomAccessFile
+import android.os.Build
 
-class InternalAudioCapture(private val projection: MediaProjection) {
+class InternalAudioCapture(
+    private val projection: MediaProjection,
+    private val onAudioChunk: (ByteArray, Int) -> Unit
+) {
 
     private var recorder: AudioRecord? = null
+
+    @Volatile
     private var isRecording = false
 
-    fun startRecording(path: String) {
+    private var recordingThread: Thread? = null
+
+    fun startRecording() {
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            throw RuntimeException("Internal audio capture requires Android 10+")
+        }
+
         val sampleRate = 16000
 
         val config = AudioPlaybackCaptureConfiguration.Builder(projection)
@@ -23,7 +33,7 @@ class InternalAudioCapture(private val projection: MediaProjection) {
             sampleRate,
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT
-        )
+        ) * 2
 
         recorder = AudioRecord.Builder()
             .setAudioFormat(
@@ -37,63 +47,53 @@ class InternalAudioCapture(private val projection: MediaProjection) {
             .setAudioPlaybackCaptureConfig(config)
             .build()
 
-        val file = File(path)
-        val fos = FileOutputStream(file)
-
-        // 1. Write an empty 44-byte placeholder for the WAV header
-        writeWavHeader(fos)
+        if (recorder?.state != AudioRecord.STATE_INITIALIZED) {
+            throw RuntimeException("AudioRecord initialization failed")
+        }
 
         recorder?.startRecording()
         isRecording = true
 
-        Thread {
+        recordingThread = Thread {
+
             val buffer = ByteArray(bufferSize)
+
             while (isRecording) {
+
                 val read = recorder?.read(buffer, 0, buffer.size) ?: 0
+
                 if (read > 0) {
-                    fos.write(buffer, 0, read)
+
+                    // send PCM chunk to consumer
+                    onAudioChunk(buffer, read)
+
+                } else if (read < 0) {
+
+                    break
                 }
             }
+        }
 
-            // 2. When recording stops, close the stream and finalize the WAV header
-            fos.close()
-            updateWavHeader(file, sampleRate)
-        }.start()
+        recordingThread?.start()
     }
 
     fun stopRecording() {
+
         isRecording = false
-        recorder?.stop()
+
+        try {
+            recorder?.stop()
+        } catch (_: Exception) {
+        }
+
         recorder?.release()
-    }
+        recorder = null
 
-    // --- WAV Header Helpers ---
+        try {
+            recordingThread?.join()
+        } catch (_: Exception) {
+        }
 
-    private fun writeWavHeader(out: FileOutputStream) {
-        val header = ByteArray(44) // Placeholder array of zeroes
-        out.write(header)
-    }
-
-    private fun updateWavHeader(file: File, sampleRate: Int) {
-        val raf = RandomAccessFile(file, "rw")
-        val fileSize = file.length()
-        val channels = 1
-        val byteRate = sampleRate * channels * 2
-
-        raf.seek(0)
-        raf.writeBytes("RIFF")
-        raf.writeInt(Integer.reverseBytes((fileSize - 8).toInt()))
-        raf.writeBytes("WAVE")
-        raf.writeBytes("fmt ")
-        raf.writeInt(Integer.reverseBytes(16))
-        raf.writeShort(java.lang.Short.reverseBytes(1.toShort()).toInt()) // PCM format = 1
-        raf.writeShort(java.lang.Short.reverseBytes(channels.toShort()).toInt())
-        raf.writeInt(Integer.reverseBytes(sampleRate))
-        raf.writeInt(Integer.reverseBytes(byteRate))
-        raf.writeShort(java.lang.Short.reverseBytes((channels * 2).toShort()).toInt())
-        raf.writeShort(java.lang.Short.reverseBytes(16.toShort()).toInt()) // 16-bit
-        raf.writeBytes("data")
-        raf.writeInt(Integer.reverseBytes((fileSize - 44).toInt()))
-        raf.close()
+        recordingThread = null
     }
 }
