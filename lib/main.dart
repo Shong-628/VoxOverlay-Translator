@@ -15,18 +15,17 @@ import 'l10n/app_localizations.dart';
 import 'db/database_helper.dart';
 
 import 'overlay/overlay_service.dart';
+import 'overlay/overlay_entry.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+// overlay entry point
 @pragma("vm:entry-point")
 void overlayMain() {
-  WidgetsFlutterBinding.ensureInitialized();
-  runApp(
-    const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      // Replace this with your actual overlay UI widget
-    ),
-  );
+  runApp(const MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: OverlayApp(),
+  ));
 }
 
 void main() {

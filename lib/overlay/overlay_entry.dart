@@ -5,15 +5,6 @@ import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'floating_bubble.dart';
 import '../models/user_preference.dart';
 
-@pragma("vm:entry-point")
-void overlayMain() { // 2. RENAMED TO overlayMain
-  WidgetsFlutterBinding.ensureInitialized();
-  runApp(const MaterialApp(
-    debugShowCheckedModeBanner: false,
-    home: OverlayApp(),
-  ));
-}
-
 class OverlayApp extends StatefulWidget {
   const OverlayApp({super.key});
   @override

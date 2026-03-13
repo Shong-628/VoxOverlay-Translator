@@ -164,6 +164,12 @@ class HomeScreen extends StatelessWidget {
           children: [
             // Status Indicator
             _StatusCard(isRunning: pipeline.isRunning),
+
+            if (pipeline.isRunning) ...[
+              const SizedBox(height: 30),
+              _MicVisualizer(level: pipeline.micLevel),
+            ],
+
             const SizedBox(height: 60),
 
             // Main Action Button
@@ -240,6 +246,63 @@ class _StatusCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _MicVisualizer extends StatelessWidget {
+  final double level;
+
+  const _MicVisualizer({required this.level});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    double iconSize = 40 + (level * 30);
+
+    return Column(
+      children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          width: iconSize,
+          height: iconSize,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: colorScheme.primaryContainer,
+          ),
+          child: Icon(
+            Icons.mic,
+            color: colorScheme.primary,
+            size: iconSize * 0.6,
+          ),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 40,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(
+              7,
+                  (index) {
+                double multiplier = (index + 1) / 7;
+                double barHeight = 6 + (level * 30 * multiplier);
+
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 120),
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  width: 6,
+                  height: barHeight,
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

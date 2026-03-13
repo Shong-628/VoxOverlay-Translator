@@ -1,6 +1,8 @@
 // lib/audio_pipeline_service.dart
 import 'dart:async';
 import 'dart:developer' as dev;
+import 'dart:typed_data';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:record/record.dart';
 
@@ -19,6 +21,9 @@ class AudioPipelineService extends ChangeNotifier {
   bool _running = false;
   bool get isRunning => _running;
   bool _isProcessing = false;
+
+  double _micLevel = 0.0;
+  double get micLevel => _micLevel;
 
   static const int _targetBytesPerChunk = 32000 * 4;
 
@@ -44,11 +49,31 @@ class AudioPipelineService extends ChangeNotifier {
     );
 
     _audioStreamSubscription = stream.listen((data) {
+      _updateMicLevel(data);
+
       _audioBuffer.addAll(data);
       if (_audioBuffer.length >= _targetBytesPerChunk && !_isProcessing) {
         _processAudioChunk();
       }
     });
+  }
+
+  void _updateMicLevel(Uint8List data) {
+    final samples = data.buffer.asInt16List();
+    if (samples.isEmpty) return;
+
+    double sum = 0;
+    for (final s in samples) {
+      final normalized = s / 32768.0;
+      sum += normalized * normalized;
+    }
+
+    final rms = sqrt(sum / samples.length);
+
+    const smoothing = 0.2;
+    _micLevel = (_micLevel * (1 - smoothing)) + (rms * smoothing);
+
+    notifyListeners();
   }
 
   Future<void> _processAudioChunk() async {
@@ -96,6 +121,7 @@ class AudioPipelineService extends ChangeNotifier {
     await _recorder.stop();
     _audioBuffer.clear();
     _isProcessing = false;
+    _micLevel = 0.0;
     notifyListeners();
   }
 
