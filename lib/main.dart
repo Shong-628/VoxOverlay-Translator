@@ -1,5 +1,4 @@
 // main.dart
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'package:provider/provider.dart';
@@ -20,7 +19,11 @@ final AudioPipelineService audioPipelineService = AudioPipelineService();
 
 @pragma("vm:entry-point")
 void overlayMain() {
-  runOverlayApp();
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: OverlayApp(),
+  ));
 }
 
 void main() {
@@ -73,15 +76,16 @@ class _AppInitializerState extends State<AppInitializer> {
             break;
 
           case 'settings':
+          // Stop the pipeline when heading to settings
+            audioPipelineService.stopPipeline();
             navigatorKey.currentState?.push(
               MaterialPageRoute(builder: (_) => const SettingsScreen()),
             );
             break;
 
           case 'close':
-            exit(0);
-
-          case 'minimize':
+          // Cleanly stop the audio pipeline instead of using exit(0)
+            audioPipelineService.stopPipeline();
             break;
         }
       }

@@ -29,7 +29,8 @@ dependencies:
   fluttertoast: ^9.0.0
   shared_preferences: ^2.2.3
   permission_handler: ^12.0.1
-  whisper_ggml: ^1.7.0
+  whisper_ggml: 1.5.0
+  # whisper_ggml: ^1.7.0 causes hardware crashes for Android 13
   sqflite: ^2.3.0
   path: ^1.8.3
   path_provider: ^2.1.2

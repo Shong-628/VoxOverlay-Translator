@@ -4,7 +4,6 @@ import 'dart:developer' as dev;
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import 'whisper_service.dart';
 import 'translation_service.dart';
@@ -26,13 +25,6 @@ class AudioPipelineService extends ChangeNotifier {
   Future<void> startPipeline() async {
     if (_running) return;
 
-    // NEW: Enforce microphone permission before starting the loop
-    var micStatus = await Permission.microphone.request();
-    if (!micStatus.isGranted) {
-      dev.log("Microphone permission denied. Cannot start pipeline.", name: 'AudioPipeline');
-      return; // Stop the pipeline from running
-    }
-
     _running = true;
     notifyListeners();
     dev.log("Audio pipeline started", name: 'AudioPipeline');
@@ -42,7 +34,7 @@ class AudioPipelineService extends ChangeNotifier {
         final audioPath = await _captureAudio();
 
         if (audioPath == null || audioPath.isEmpty) {
-          await Future.delayed(const Duration(seconds: 1));
+          if (_running) await Future.delayed(const Duration(seconds: 1));
           continue;
         }
 
@@ -73,7 +65,7 @@ class AudioPipelineService extends ChangeNotifier {
         );
 
         // Prevent rapid error looping
-        await Future.delayed(const Duration(seconds: 2));
+        if (_running) await Future.delayed(const Duration(seconds: 2));
       }
     }
   }
@@ -81,8 +73,6 @@ class AudioPipelineService extends ChangeNotifier {
   void stopPipeline() {
     _running = false;
     notifyListeners();
-    _whisperService.dispose();
-    _translationService.dispose();
     dev.log("Audio pipeline stopped", name: 'AudioPipeline');
   }
 
@@ -101,6 +91,7 @@ class AudioPipelineService extends ChangeNotifier {
 
   Future<String?> _captureMicAudio() async {
     try {
+      // Internal check for permission, but UI handles the request/denial logic
       if (!await _recorder.hasPermission()) return null;
 
       final tempDir = await getTemporaryDirectory();
@@ -116,6 +107,10 @@ class AudioPipelineService extends ChangeNotifier {
       );
 
       await Future.delayed(const Duration(seconds: 5));
+      if (!_running) {
+        await _recorder.stop();
+        return null;
+      }
       return await _recorder.stop();
     } catch (e) {
       return null;

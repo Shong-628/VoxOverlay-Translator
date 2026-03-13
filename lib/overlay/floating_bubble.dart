@@ -46,26 +46,33 @@ class _FloatingBubbleState extends State<FloatingBubble> {
   }
 
   Future<void> _updateWindowSize() async {
-    if (expanded) {
-      await FlutterOverlayWindow.resizeOverlay(280, 280, true);
-    } else if (widget.text.trim().isNotEmpty) {
-      // Use matchParent when text is present so we have the full screen width to draw subtitles
-      await FlutterOverlayWindow.resizeOverlay(WindowSize.matchParent, 160, true);
-    } else {
-      // Shrink to just the bubble size when idle
-      await FlutterOverlayWindow.resizeOverlay(100, 100, true);
+    try {
+      if (expanded) {
+        await FlutterOverlayWindow.resizeOverlay(280, 280, true);
+      } else if (widget.text.trim().isNotEmpty) {
+        await FlutterOverlayWindow.resizeOverlay(-1, 160, true);
+      } else {
+        await FlutterOverlayWindow.resizeOverlay(100, 100, true);
+      }
+    } catch (e) {
+      debugPrint("Resize overlay failed: $e");
     }
   }
 
   void _handleAction(String action) async {
     FlutterOverlayWindow.shareData({"action": action});
 
-    if (action == 'close') {
-      FlutterOverlayWindow.closeOverlay();
-      return;
+    switch (action) {
+      case 'close':
+        FlutterOverlayWindow.closeOverlay();
+        return;
+      case 'settings':
+        FlutterOverlayWindow.closeOverlay();
+        return;
+      case 'toggle':
+        setState(() => isPlaying = !isPlaying);
+        break;
     }
-
-    if (action == 'toggle') setState(() => isPlaying = !isPlaying);
 
     _collapseMenu();
   }
@@ -91,9 +98,19 @@ class _FloatingBubbleState extends State<FloatingBubble> {
     }
   }
 
-  IconData _getCenterIcon() {
-    if (expanded) return Icons.close;
-    return isPlaying ? Icons.translate : Icons.pause;
+  Widget _getCenterWidget() {
+    if (expanded) {
+      return const Icon(Icons.close, color: Colors.white, size: 28, key: ValueKey('close_icon'));
+    }
+
+    // Using the image asset when collapsed
+    return Image.asset(
+      '../lib/assets/icon.png', // Ensure this matches your pubspec.yaml path exactly
+      width: 28,
+      height: 28,
+      key: const ValueKey('app_icon'),
+      errorBuilder: (context, error, stackTrace) => const Icon(Icons.mic, color: Colors.white, size: 28), // Fallback if image fails
+    );
   }
 
   @override
@@ -143,12 +160,7 @@ class _FloatingBubbleState extends State<FloatingBubble> {
                 child: Center(
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 280),
-                    child: Icon(
-                      _getCenterIcon(),
-                      key: ValueKey(_getCenterIcon()),
-                      color: Colors.white,
-                      size: 28,
-                    ),
+                    child: _getCenterWidget(),
                   ),
                 ),
               ),
@@ -164,12 +176,13 @@ class _FloatingBubbleState extends State<FloatingBubble> {
       {'icon': Icons.settings, 'label': 'settings'},
       {'icon': isPlaying ? Icons.pause : Icons.play_arrow, 'label': 'toggle'},
       {'icon': Icons.power_settings_new, 'label': 'close'},
-      {'icon': Icons.compress, 'label': 'minimize'},
     ];
 
-    final angles = [-math.pi / 2, 0.0, math.pi / 2, math.pi];
+    // Adjusted for 3 buttons instead of 4 so they spread out properly
+    final angles = [-math.pi / 2, -math.pi / 4, 0.0];
 
-    return List.generate(4, (index) {
+    // FIX: Use actions.length to prevent the RangeError crash
+    return List.generate(actions.length, (index) {
       double distance = expanded ? menuRadius : 0.0;
       double dx = distance * math.cos(angles[index]);
       double dy = distance * math.sin(angles[index]);

@@ -734,10 +734,10 @@ packages:
     dependency: "direct main"
     description:
       name: whisper_ggml
-      sha256: "71c2b5bf69b2b05f2f766b8e862111dcbb4b9e5ae844b7df6945c6584eb24ebd"
+      sha256: "951612d112cbc62daea30eb09d8476098f9ece45ae152a42ca004e08d4e672f8"
       url: "https://pub.dev"
     source: hosted
-    version: "1.7.0"
+    version: "1.5.0"
   xdg_directories:
     dependency: transitive
     description:

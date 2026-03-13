@@ -5,6 +5,9 @@ import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'floating_bubble.dart';
 import '../models/user_preference.dart';
 
+// 1. ADD THIS PRAGMA ANNOTATION
+@pragma("vm:entry-point")
+// 2. RENAME FUNCTION TO MATCH entryPoint: 'overlayMain'
 void runOverlayApp() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const MaterialApp(

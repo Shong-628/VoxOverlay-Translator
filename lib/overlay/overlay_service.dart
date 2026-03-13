@@ -17,15 +17,6 @@ class OverlayService {
   /// Start the overlay window
   static Future<void> startOverlay() async {
     try {
-      // 1. NEW: Check and request Microphone permission first (Android 14+ requirement)
-      var micStatus = await Permission.microphone.status;
-      if (!micStatus.isGranted) {
-        micStatus = await Permission.microphone.request();
-        if (!micStatus.isGranted) {
-          dev.log("Microphone permission denied by user. Cannot start overlay.", name: 'OverlayService');
-          return; // Abort! Do not start the overlay.
-        }
-      }
 
       // 2. Existing Overlay (System Alert Window) permission check
       bool permission = await hasPermission();

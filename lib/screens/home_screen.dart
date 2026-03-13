@@ -1,34 +1,46 @@
 // home_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../services/audio_pipeline_service.dart';
 import '../overlay/overlay_service.dart';
 import 'settings_screen.dart';
 import 'onboarding_screen.dart';
-import '../db/database_helper.dart';
-import '../models/user_preference.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
   Future<void> _handleTogglePipeline(BuildContext context, AudioPipelineService service) async {
     if (!service.isRunning) {
-      // Starting
-      bool hasPermission = await OverlayService.hasPermission();
-      if (!hasPermission) {
+      // 1. Check Overlay Permission
+      bool hasOverlayPermission = await OverlayService.hasPermission();
+      if (!hasOverlayPermission) {
         await OverlayService.requestPermission();
-        hasPermission = await OverlayService.hasPermission();
+        hasOverlayPermission = await OverlayService.hasPermission();
       }
 
-      if (hasPermission) {
+      if (!hasOverlayPermission) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Overlay permission is required")),
+          );
+        }
+        return;
+      }
+
+      // 2. Check Microphone Permission
+      var micStatus = await Permission.microphone.status;
+      if (!micStatus.isGranted) {
+        micStatus = await Permission.microphone.request();
+      }
+
+      if (micStatus.isGranted) {
         service.startPipeline();
-        // Overlay will be started by the service when data is available, 
-        // or we can explicitly start it here to show feedback.
         await OverlayService.startOverlay();
       } else {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Overlay permission is required")),
+            const SnackBar(content: Text("Microphone permission is required for transcription")),
           );
         }
       }
@@ -67,7 +79,7 @@ class HomeScreen extends StatelessWidget {
                   ),
                   Text(
                     "Real-time Translator",
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 14),
+                    style: TextStyle(color: Colors.white.withAlpha(204), fontSize: 14),
                   ),
                 ],
               ),
@@ -133,7 +145,7 @@ class HomeScreen extends StatelessWidget {
                   : "Ready to translate.\nTap the button to start.",
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: colorScheme.onSurface.withValues(alpha: 0.6),
+                color: colorScheme.onSurface.withAlpha(153),
                 fontSize: 16,
               ),
             ),
@@ -156,8 +168,8 @@ class _StatusCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       decoration: BoxDecoration(
         color: isRunning 
-            ? colorScheme.primaryContainer.withValues(alpha: 0.3) 
-            : colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+            ? colorScheme.primaryContainer.withAlpha(76) 
+            : colorScheme.surfaceContainerHighest.withAlpha(76),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: isRunning ? colorScheme.primary : colorScheme.outline,
@@ -175,7 +187,7 @@ class _StatusCard extends StatelessWidget {
               shape: BoxShape.circle,
               boxShadow: isRunning ? [
                 BoxShadow(
-                  color: Colors.green.withValues(alpha: 0.5),
+                  color: Colors.green.withAlpha(127),
                   blurRadius: 8,
                   spreadRadius: 2,
                 )
@@ -218,7 +230,7 @@ class _StartStopButton extends StatelessWidget {
           color: isRunning ? colorScheme.errorContainer : colorScheme.primaryContainer,
           boxShadow: [
             BoxShadow(
-              color: (isRunning ? colorScheme.error : colorScheme.primary).withValues(alpha: 0.3),
+              color: (isRunning ? colorScheme.error : colorScheme.primary).withAlpha(76),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
