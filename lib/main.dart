@@ -1,30 +1,22 @@
-// main.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+import 'services/translation_service.dart';
+import 'services/audio_pipeline_service.dart';
+import 'services/settings_controller.dart';
+
 import 'screens/onboarding_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/home_screen.dart';
-import 'services/audio_pipeline_service.dart';
-import 'services/settings_controller.dart';
-import 'overlay/overlay_entry.dart';
+
 import 'l10n/app_localizations.dart';
 import 'db/database_helper.dart';
 
-// Global keys and services
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-final AudioPipelineService audioPipelineService = AudioPipelineService();
+import 'overlay/overlay_service.dart';
 
-@pragma("vm:entry-point")
-void overlayMain() {
-  WidgetsFlutterBinding.ensureInitialized();
-  runApp(const MaterialApp(
-    debugShowCheckedModeBanner: false,
-    home: OverlayApp(),
-  ));
-}
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -40,52 +32,54 @@ class AppInitializer extends StatefulWidget {
 
 class _AppInitializerState extends State<AppInitializer> {
   final SettingsController _settingsController = SettingsController();
-  bool _isInitialized = false;
-  bool _isTutorialCompleted = false;
+  final AudioPipelineService _audioPipeline = AudioPipelineService();
+  final TranslationService _translationService = TranslationService();
+
+  bool _initialized = false;
+  bool _tutorialDone = false;
 
   @override
   void initState() {
     super.initState();
-    _initializeApp();
+    _initialize();
   }
 
-  Future<void> _initializeApp() async {
-    await audioPipelineService.initialize();
-    await _settingsController.loadSettings();
+  Future<void> _initialize() async {
+    await Future.wait([
+      _audioPipeline.initialize(),
+      _settingsController.loadSettings(),
+      _translationService.initialize(),
+    ]);
 
     final prefs = await DatabaseHelper.instance.getPreferences();
-    _isTutorialCompleted = prefs.isTutorialCompleted;
+    _tutorialDone = prefs.isTutorialCompleted;
 
     _setupOverlayListener();
 
     if (mounted) {
-      setState(() {
-        _isInitialized = true;
-      });
+      setState(() => _initialized = true);
     }
   }
 
   void _setupOverlayListener() {
     FlutterOverlayWindow.overlayListener.listen((data) {
-      if (data is Map && data.containsKey('action')) {
-        final String action = data['action'];
+      OverlayService.handleSystemMessage(data);
 
-        switch (action) {
+      if (data is Map && data.containsKey('action')) {
+        switch (data['action']) {
           case 'toggle':
-            audioPipelineService.togglePipeline();
+            _audioPipeline.togglePipeline();
             break;
 
           case 'settings':
-          // Stop the pipeline when heading to settings
-            audioPipelineService.stopPipeline();
+            _audioPipeline.stopPipeline();
             navigatorKey.currentState?.push(
               MaterialPageRoute(builder: (_) => const SettingsScreen()),
             );
             break;
 
           case 'close':
-          // Cleanly stop the audio pipeline instead of using exit(0)
-            audioPipelineService.stopPipeline();
+            _audioPipeline.stopPipeline();
             break;
         }
       }
@@ -94,13 +88,11 @@ class _AppInitializerState extends State<AppInitializer> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_isInitialized) {
+    if (!_initialized) {
       return const MaterialApp(
         debugShowCheckedModeBanner: false,
         home: Scaffold(
-          body: Center(
-            child: CircularProgressIndicator(),
-          ),
+          body: Center(child: CircularProgressIndicator()),
         ),
       );
     }
@@ -108,15 +100,17 @@ class _AppInitializerState extends State<AppInitializer> {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: _settingsController),
-        ChangeNotifierProvider.value(value: audioPipelineService),
+        ChangeNotifierProvider.value(value: _audioPipeline),
+        ChangeNotifierProvider.value(value: _translationService),
       ],
-      child: VoxOverlayApp(isTutorialCompleted: _isTutorialCompleted),
+      child: VoxOverlayApp(isTutorialCompleted: _tutorialDone),
     );
   }
 }
 
 class VoxOverlayApp extends StatelessWidget {
   final bool isTutorialCompleted;
+
   const VoxOverlayApp({super.key, required this.isTutorialCompleted});
 
   @override

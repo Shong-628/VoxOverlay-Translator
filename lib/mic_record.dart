@@ -5,7 +5,6 @@ import 'package:record/record.dart';
 final recorder = AudioRecorder();
 
 Future<String> captureAudio() async {
-  // 2. Fallback to Mic
   final tempDir = await getTemporaryDirectory();
   final String wavPath = "${tempDir.path}/mic_audio.wav";
 

@@ -1,28 +1,45 @@
-// translation_service.dart
 import 'dart:developer' as dev;
+import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_translation/google_mlkit_translation.dart';
 import '../db/database_helper.dart';
 
-class TranslationService {
-  OnDeviceTranslator? _translator;
-  final _modelManager = OnDeviceTranslatorModelManager();
+class TranslationService extends ChangeNotifier {
+  final OnDeviceTranslatorModelManager _modelManager =
+  OnDeviceTranslatorModelManager();
 
-  String _currentSourcePref = "";
-  String _currentTargetPref = "";
+  final Map<String, OnDeviceTranslator> _translatorCache = {};
+
+  String _sourcePref = "";
+  String _targetPref = "";
+
   bool _isInitialized = false;
+  bool get isInitialized => _isInitialized;
 
-  /// Call this once when the app starts, and whenever the user changes settings in the UI
-  Future<void> loadPreferences() async {
+  /// Supported languages for the app
+  static const supportedLanguages = [
+    TranslateLanguage.english,
+    TranslateLanguage.malay,
+    TranslateLanguage.chinese,
+  ];
+
+  /// Initializes translation system and downloads required models
+  Future<void> initialize() async {
     final prefs = await DatabaseHelper.instance.getPreferences();
-    _currentSourcePref = prefs.sourceLanguageCode;
-    _currentTargetPref = prefs.targetLanguageCode;
+
+    _sourcePref = prefs.sourceLanguageCode;
+    _targetPref = prefs.targetLanguageCode;
+
+    await _predownloadModels();
+
     _isInitialized = true;
-    dev.log("Translation preferences loaded: $_currentSourcePref -> $_currentTargetPref", name: 'TranslationService');
+    notifyListeners();
+
+    dev.log("TranslationService initialized", name: "TranslationService");
   }
 
-  /// Maps database/UI strings to Google ML Kit's TranslateLanguage Enums
-  TranslateLanguage _mapLanguageToEnum(String languageName) {
-    switch (languageName.toLowerCase()) {
+  /// Maps stored names to ML Kit enums
+  TranslateLanguage _mapLanguage(String name) {
+    switch (name.toLowerCase()) {
       case 'english':
         return TranslateLanguage.english;
       case 'malay':
@@ -34,72 +51,94 @@ class TranslationService {
     }
   }
 
-  /// Checks if models exist on device, and downloads them if they don't.
-  Future<void> _ensureModelsDownloaded(TranslateLanguage source, TranslateLanguage target) async {
-    final bool isSourceDownloaded = await _modelManager.isModelDownloaded(source.bcpCode);
-    final bool isTargetDownloaded = await _modelManager.isModelDownloaded(target.bcpCode);
+  /// Downloads all supported models in parallel
+  Future<void> _predownloadModels() async {
+    final futures = supportedLanguages.map((lang) async {
+      final downloaded = await _modelManager.isModelDownloaded(lang.bcpCode);
 
-    if (!isSourceDownloaded) {
-      dev.log("Downloading source model: ${source.name}...", name: 'TranslationService');
-      await _modelManager.downloadModel(source.bcpCode);
-    }
+      if (!downloaded) {
+        dev.log("Downloading model: ${lang.name}",
+            name: "TranslationService");
+        await _modelManager.downloadModel(lang.bcpCode);
+      }
+    });
 
-    if (!isTargetDownloaded) {
-      dev.log("Downloading target model: ${target.name}...", name: 'TranslationService');
-      await _modelManager.downloadModel(target.bcpCode);
-    }
+    await Future.wait(futures);
   }
 
-  /// Translates the text based on cached preferences
+  /// Returns cached translator or creates a new one
+  Future<OnDeviceTranslator> _getTranslator(
+      TranslateLanguage source,
+      TranslateLanguage target,
+      ) async {
+    final key = "${source.bcpCode}_${target.bcpCode}";
+
+    if (_translatorCache.containsKey(key)) {
+      return _translatorCache[key]!;
+    }
+
+    final translator = OnDeviceTranslator(
+      sourceLanguage: source,
+      targetLanguage: target,
+    );
+
+    _translatorCache[key] = translator;
+
+    dev.log("Translator cached: $key", name: "TranslationService");
+
+    return translator;
+  }
+
+  /// Main translation function
   Future<String> translate(String text) async {
-    if (text.isEmpty) return "";
+    if (text.isEmpty || !_isInitialized) return text;
+
+    if (_targetPref.toLowerCase() == 'none' ||
+        _sourcePref.toLowerCase() == _targetPref.toLowerCase()) {
+      return text;
+    }
 
     try {
-      // Ensure we have preferences loaded
-      if (!_isInitialized) {
-        await loadPreferences();
-      }
+      final sourceLang = _mapLanguage(_sourcePref);
+      final targetLang = _mapLanguage(_targetPref);
 
-      // 1. Early Exits
-      if (_currentTargetPref.toLowerCase() == 'none' ||
-          _currentSourcePref.toLowerCase() == _currentTargetPref.toLowerCase()) {
-        return text;
-      }
+      final translator = await _getTranslator(sourceLang, targetLang);
 
-      // 2. Convert string preferences to ML Kit enums
-      final sourceLang = _mapLanguageToEnum(_currentSourcePref);
-      final targetLang = _mapLanguageToEnum(_currentTargetPref);
-
-      // 3. Initialize or Update the Translator ONLY if it hasn't been set up yet
-      // (If languages change, loadPreferences() should be called, which will trigger a re-init here if we added logic for it,
-      // but to keep it simple, we check if the translator matches our current cache)
-      if (_translator == null) {
-        await _setupNewTranslator(sourceLang, targetLang);
-      }
-
-      // 4. Direct translation
-      final String result = await _translator!.translateText(text);
-      return result;
-
+      return await translator.translateText(text);
     } catch (e, stackTrace) {
-      dev.log("Translation error", name: 'TranslationService', error: e, stackTrace: stackTrace);
+      dev.log(
+        "Translation error",
+        name: "TranslationService",
+        error: e,
+        stackTrace: stackTrace,
+      );
+
       return text;
     }
   }
 
-  Future<void> _setupNewTranslator(TranslateLanguage sourceLang, TranslateLanguage targetLang) async {
-    _translator?.close(); // Close old translator
-    await _ensureModelsDownloaded(sourceLang, targetLang);
+  /// Update preferences when user changes settings
+  Future<void> reloadPreferences() async {
+    final prefs = await DatabaseHelper.instance.getPreferences();
 
-    _translator = OnDeviceTranslator(
-      sourceLanguage: sourceLang,
-      targetLanguage: targetLang,
+    _sourcePref = prefs.sourceLanguageCode;
+    _targetPref = prefs.targetLanguageCode;
+
+    dev.log(
+      "Preferences updated: $_sourcePref -> $_targetPref",
+      name: "TranslationService",
     );
-    dev.log("Translator initialized for: ${sourceLang.name} -> ${targetLang.name}", name: 'TranslationService');
   }
 
-  /// Clean up resources when your app closes
+  /// Dispose all cached translators
+  @override
   void dispose() {
-    _translator?.close();
+    for (final translator in _translatorCache.values) {
+      translator.close();
+    }
+
+    _translatorCache.clear();
+
+    super.dispose();
   }
 }

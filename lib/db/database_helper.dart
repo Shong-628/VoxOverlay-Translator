@@ -52,9 +52,9 @@ class DatabaseHelper {
     } else {
       // Create defaults
       final defaultPrefs = UserPreference(
-        sourceLanguageCode: 'Auto',   // Matches your UI default
-        targetLanguageCode: 'None',   // Matches your UI default
-        fontSizeScale: 18.0,          // Updated to fall within Slider min/max
+        sourceLanguageCode: 'en',
+        targetLanguageCode: 'None',
+        fontSizeScale: 18.0,
         overlayOpacity: 80,
         textColorHex: '#FFFFFF',
         bgColorHex: '#000000',

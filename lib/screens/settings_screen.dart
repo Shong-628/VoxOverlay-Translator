@@ -19,7 +19,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   // DB Preferences (Subtitle Settings)
   UserPreference? _userPrefs;
-  String sourceLanguage = "Auto";
+  String sourceLanguage = "English";
   String targetLanguage = "None";
   double fontSize = 18.0;
   int opacity = 80; // Stored as 0-100 integer in DB

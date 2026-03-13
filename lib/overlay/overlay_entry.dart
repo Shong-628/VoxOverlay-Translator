@@ -5,10 +5,8 @@ import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'floating_bubble.dart';
 import '../models/user_preference.dart';
 
-// 1. ADD THIS PRAGMA ANNOTATION
 @pragma("vm:entry-point")
-// 2. RENAME FUNCTION TO MATCH entryPoint: 'overlayMain'
-void runOverlayApp() {
+void overlayMain() { // 2. RENAMED TO overlayMain
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
@@ -23,13 +21,13 @@ class OverlayApp extends StatefulWidget {
 }
 
 class _OverlayAppState extends State<OverlayApp> {
-  String subtitle = "Listening...";
+  String subtitle = "...";
 
-  // 1. Provide a fallback default preference so the UI can render immediately
+  // Fallback default preference so the UI can render immediately
   UserPreference _currentPrefs = UserPreference(
-    sourceLanguageCode: 'auto',
-    targetLanguageCode: 'none',
-    fontSizeScale: 1.0,
+    sourceLanguageCode: 'en',
+    targetLanguageCode: 'en',
+    fontSizeScale: 18.0,
     overlayOpacity: 80,
     textColorHex: '#FFFFFF',
     bgColorHex: '#000000',
@@ -40,39 +38,33 @@ class _OverlayAppState extends State<OverlayApp> {
   void initState() {
     super.initState();
 
-    // Listen for data from the main app isolate
+    // Listen for live updates (e.g., if user changes settings while overlay is open)
     FlutterOverlayWindow.overlayListener.listen((data) {
       dev.log("OVERLAY RECEIVED DATA: $data");
       if (data == null) return;
 
-      // 2. Handle dynamically pushed preferences vs standard subtitle text
       if (data is Map && data.containsKey('target_language_code')) {
-        // If the main app sends a Map matching the preference model, update the theme
         setState(() {
           _currentPrefs = UserPreference.fromMap(Map<String, dynamic>.from(data));
         });
       }
       else if (data is Map && data.containsKey('text')) {
-        // Fallback for maps containing text
         setState(() => subtitle = data['text'].toString());
       }
       else {
-        // Standard string data for subtitles
         setState(() => subtitle = data.toString());
       }
     });
+    FlutterOverlayWindow.shareData({"status": "ready"});
   }
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      // Ensure the material itself doesn't have a solid color
       type: MaterialType.transparency,
-      // Note: We removed the Center() widget here because our new FloatingBubble
-      // is designed to take over the full screen and manage its own coordinates.
       child: FloatingBubble(
         text: subtitle,
-        prefs: _currentPrefs, // Pass the preferences down to the bubble
+        prefs: _currentPrefs,
       ),
     );
   }

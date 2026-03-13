@@ -1,8 +1,7 @@
-// audio_pipeline_service.dart
+// lib/audio_pipeline_service.dart
 import 'dart:async';
 import 'dart:developer' as dev;
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 import 'whisper_service.dart';
@@ -14,106 +13,93 @@ class AudioPipelineService extends ChangeNotifier {
   final TranslationService _translationService = TranslationService();
   final AudioRecorder _recorder = AudioRecorder();
 
+  StreamSubscription<Uint8List>? _audioStreamSubscription;
+  final List<int> _audioBuffer = [];
+
   bool _running = false;
   bool get isRunning => _running;
+  bool _isProcessing = false;
+
+  static const int _targetBytesPerChunk = 32000 * 4;
 
   Future<void> initialize() async {
     await _whisperService.initialize();
-    dev.log("Pipeline initialized", name: 'AudioPipeline');
   }
 
   Future<void> startPipeline() async {
     if (_running) return;
+    if (!await _recorder.hasPermission()) return;
 
     _running = true;
+    _isProcessing = false;
+    _audioBuffer.clear();
     notifyListeners();
-    dev.log("Audio pipeline started", name: 'AudioPipeline');
 
-    while (_running) {
-      try {
-        final audioPath = await _captureAudio();
+    final stream = await _recorder.startStream(
+      const RecordConfig(
+        encoder: AudioEncoder.pcm16bits,
+        sampleRate: 16000,
+        numChannels: 1,
+      ),
+    );
 
-        if (audioPath == null || audioPath.isEmpty) {
-          if (_running) await Future.delayed(const Duration(seconds: 1));
-          continue;
-        }
+    _audioStreamSubscription = stream.listen((data) {
+      _audioBuffer.addAll(data);
+      if (_audioBuffer.length >= _targetBytesPerChunk && !_isProcessing) {
+        _processAudioChunk();
+      }
+    });
+  }
 
-        // 1. TRANSCRIPTION
-        final transcript = await _whisperService.transcribe(audioPath);
+  Future<void> _processAudioChunk() async {
+    if (!_running || _audioBuffer.isEmpty) return;
 
-        if (!_running) return;
+    _isProcessing = true;
 
-        if (transcript.trim().isEmpty) {
-          dev.log("Empty transcript, skipping...", name: 'AudioPipeline');
-          continue;
-        }
+    try {
+      // 1. Extract bytes and clear buffer instantly
+      final chunkBytes = Uint8List.fromList(_audioBuffer);
+      _audioBuffer.clear();
 
-        // 2. TRANSLATION
-        final translated = await _translationService.translate(transcript);
+      // 2. Convert 16-bit PCM Ints to 32-bit Floats (Expected by Whisper)
+      // Normalizing the int16 (-32768 to 32767) to float32 (-1.0 to 1.0)
+      final int16List = chunkBytes.buffer.asInt16List();
+      final floatList = List<double>.filled(int16List.length, 0.0);
+      for (int i = 0; i < int16List.length; i++) {
+        floatList[i] = int16List[i] / 32768.0;
+      }
 
+      // 3. Transcribe directly from RAM
+      final transcript = await _whisperService.transcribe(floatList);
+
+      if (!_running || transcript.trim().isEmpty) return;
+
+      // 4. Translate & Update UI
+      final translated = await _translationService.translate(transcript);
+      if (_running) {
         dev.log("PIPELINE OUTPUT: '$translated'");
-
-        // 3. UI Updates
         OverlayService.showSubtitle(translated);
-
-      } catch (e, stackTrace) {
-        dev.log(
-          "Audio pipeline loop error",
-          name: 'AudioPipeline',
-          error: e,
-          stackTrace: stackTrace,
-        );
-
-        // Prevent rapid error looping
-        if (_running) await Future.delayed(const Duration(seconds: 2));
+      }
+    } catch (e) {
+      dev.log("Pipeline error", name: 'AudioPipeline', error: e);
+    } finally {
+      _isProcessing = false;
+      if (_audioBuffer.length >= _targetBytesPerChunk && _running) {
+        _processAudioChunk(); // Catch up if buffer filled during processing
       }
     }
   }
 
-  void stopPipeline() {
+  Future<void> stopPipeline() async {
     _running = false;
+    await _audioStreamSubscription?.cancel();
+    await _recorder.stop();
+    _audioBuffer.clear();
+    _isProcessing = false;
     notifyListeners();
-    dev.log("Audio pipeline stopped", name: 'AudioPipeline');
   }
 
   void togglePipeline() {
-    if (_running) {
-      stopPipeline();
-    } else {
-      startPipeline();
-    }
-  }
-
-  /// Capture audio directly from microphone
-  Future<String?> _captureAudio() async {
-    return await _captureMicAudio();
-  }
-
-  Future<String?> _captureMicAudio() async {
-    try {
-      // Internal check for permission, but UI handles the request/denial logic
-      if (!await _recorder.hasPermission()) return null;
-
-      final tempDir = await getTemporaryDirectory();
-      final path = "${tempDir.path}/voxoverlay_mic.wav";
-
-      await _recorder.start(
-        const RecordConfig(
-          encoder: AudioEncoder.wav,
-          sampleRate: 16000,
-          numChannels: 1,
-        ),
-        path: path,
-      );
-
-      await Future.delayed(const Duration(seconds: 5));
-      if (!_running) {
-        await _recorder.stop();
-        return null;
-      }
-      return await _recorder.stop();
-    } catch (e) {
-      return null;
-    }
+    _running ? stopPipeline() : startPipeline();
   }
 }

@@ -21,7 +21,8 @@ android {
         versionName = flutter.versionName
 
         ndk {
-            abiFilters += listOf("arm64-v8a")
+            abiFilters.add("armeabi-v7a")
+            abiFilters.add("arm64-v8a")
         }
     }
     compileOptions {
@@ -31,6 +32,12 @@ android {
 
     kotlinOptions {
         jvmTarget = JavaVersion.VERSION_17.toString()
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+        }
     }
 }
 

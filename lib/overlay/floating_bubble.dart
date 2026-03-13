@@ -46,11 +46,12 @@ class _FloatingBubbleState extends State<FloatingBubble> {
   }
 
   Future<void> _updateWindowSize() async {
+    await Future.delayed(const Duration(milliseconds: 200));
     try {
       if (expanded) {
         await FlutterOverlayWindow.resizeOverlay(280, 280, true);
       } else if (widget.text.trim().isNotEmpty) {
-        await FlutterOverlayWindow.resizeOverlay(-1, 160, true);
+        await FlutterOverlayWindow.resizeOverlay(WindowSize.matchParent, 160, true);
       } else {
         await FlutterOverlayWindow.resizeOverlay(100, 100, true);
       }
@@ -105,7 +106,7 @@ class _FloatingBubbleState extends State<FloatingBubble> {
 
     // Using the image asset when collapsed
     return Image.asset(
-      '../lib/assets/icon.png', // Ensure this matches your pubspec.yaml path exactly
+      'assets/icon.png', // Ensure this matches your pubspec.yaml path exactly
       width: 28,
       height: 28,
       key: const ValueKey('app_icon'),

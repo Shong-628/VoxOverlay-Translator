@@ -20,16 +20,22 @@ class HomeScreen extends StatelessWidget {
       }
 
       if (!hasOverlayPermission) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Overlay permission is required")),
-          );
-        }
+        if (!context.mounted) return; // Safety check after await
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Overlay permission is required")),
+        );
         return;
       }
 
-      // 2. Check Microphone Permission
+      // 2. Check Microphone Permission safely
       var micStatus = await Permission.microphone.status;
+
+      if (micStatus.isPermanentlyDenied) {
+        if (!context.mounted) return;
+        _showSettingsDialog(context, "Microphone access is permanently denied. Please enable it in system settings.");
+        return;
+      }
+
       if (!micStatus.isGranted) {
         micStatus = await Permission.microphone.request();
       }
@@ -38,7 +44,12 @@ class HomeScreen extends StatelessWidget {
         service.startPipeline();
         await OverlayService.startOverlay();
       } else {
-        if (context.mounted) {
+        if (!context.mounted) return; // Safety check after await
+
+        // Catch the scenario where they just denied it during the request
+        if (micStatus.isPermanentlyDenied) {
+          _showSettingsDialog(context, "Microphone access is permanently denied. Please enable it in system settings.");
+        } else {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("Microphone permission is required for transcription")),
           );
@@ -49,6 +60,30 @@ class HomeScreen extends StatelessWidget {
       service.stopPipeline();
       await OverlayService.stopOverlay();
     }
+  }
+
+  // Helper method to direct users to app settings
+  void _showSettingsDialog(BuildContext context, String message) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Permission Required"),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              openAppSettings(); // Requires permission_handler
+            },
+            child: const Text("Open Settings"),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -130,17 +165,17 @@ class HomeScreen extends StatelessWidget {
             // Status Indicator
             _StatusCard(isRunning: pipeline.isRunning),
             const SizedBox(height: 60),
-            
+
             // Main Action Button
             _StartStopButton(
               isRunning: pipeline.isRunning,
               onPressed: () => _handleTogglePipeline(context, pipeline),
             ),
-            
+
             const SizedBox(height: 40),
-            
+
             Text(
-              pipeline.isRunning 
+              pipeline.isRunning
                   ? "Translation is active.\nCheck the overlay for subtitles."
                   : "Ready to translate.\nTap the button to start.",
               textAlign: TextAlign.center,
@@ -163,12 +198,12 @@ class _StatusCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       decoration: BoxDecoration(
-        color: isRunning 
-            ? colorScheme.primaryContainer.withAlpha(76) 
+        color: isRunning
+            ? colorScheme.primaryContainer.withAlpha(76)
             : colorScheme.surfaceContainerHighest.withAlpha(76),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(

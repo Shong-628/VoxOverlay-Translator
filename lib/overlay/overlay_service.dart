@@ -1,9 +1,24 @@
 // overlay_service.dart
+import 'dart:async'; // Added for Completer
 import 'dart:developer' as dev;
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../db/database_helper.dart';
 
 class OverlayService {
+  /// Holds the pending state while the overlay boots
+  static Completer<bool>? _overlayReadyCompleter;
+
+  /// Processes incoming system-level pings from the overlay
+  static void handleSystemMessage(dynamic data) {
+    if (data is Map && data['status'] == 'ready') {
+      if (_overlayReadyCompleter != null && !_overlayReadyCompleter!.isCompleted) {
+        _overlayReadyCompleter!.complete(true);
+        dev.log("Overlay ping received: Ready!", name: 'OverlayService');
+      }
+    }
+  }
+
   /// Check if overlay permission is granted
   static Future<bool> hasPermission() async {
     return await FlutterOverlayWindow.isPermissionGranted();
@@ -17,8 +32,7 @@ class OverlayService {
   /// Start the overlay window
   static Future<void> startOverlay() async {
     try {
-
-      // 2. Existing Overlay (System Alert Window) permission check
+      // Existing Overlay (System Alert Window) permission check
       bool permission = await hasPermission();
       if (!permission) {
         await requestPermission();
@@ -32,7 +46,10 @@ class OverlayService {
       bool isActive = await FlutterOverlayWindow.isActive();
       if (isActive) return;
 
-      // 3. Start the overlay only after BOTH permissions are secured
+      // Initialize a fresh Completer right before starting the overlay
+      _overlayReadyCompleter = Completer<bool>();
+
+      // Start the overlay only after BOTH permissions are secured
       await FlutterOverlayWindow.showOverlay(
         height: 160,
         width: WindowSize.matchParent,
@@ -40,6 +57,9 @@ class OverlayService {
         flag: OverlayFlag.defaultFlag,
         enableDrag: true,
       );
+
+      final prefs = await DatabaseHelper.instance.getPreferences();
+      await FlutterOverlayWindow.shareData(prefs.toMap());
 
       dev.log("Overlay window started", name: 'OverlayService');
     } catch (e, stackTrace) {
@@ -61,15 +81,25 @@ class OverlayService {
   }
 
   /// Send subtitle text to the overlay
-  /// Renamed to showSubtitle to match AudioPipelineService calls
   static Future<void> showSubtitle(String text) async {
     if (text.trim().isEmpty) return;
 
     try {
       bool active = await FlutterOverlayWindow.isActive();
       if (!active) {
-        // Optional: Auto-start overlay if it's not active
         await startOverlay();
+
+        // Safely wait for the overlay to signal it is ready
+        if (_overlayReadyCompleter != null) {
+          // Use a timeout to prevent the app from hanging if the overlay crashes
+          await _overlayReadyCompleter!.future.timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              dev.log("Overlay boot timeout - proceeding anyway", name: 'OverlayService');
+              return false;
+            },
+          );
+        }
       }
 
       // Sends data to the overlay entry point

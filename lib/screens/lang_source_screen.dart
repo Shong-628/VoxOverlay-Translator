@@ -26,9 +26,7 @@ class _LangSourceScreenState extends State<LangSourceScreen> {
   Future<void> _loadCurrentPreference() async {
     final prefs = await DatabaseHelper.instance.getPreferences();
     setState(() {
-      selectedLanguage = prefs.sourceLanguageCode.isNotEmpty
-          ? prefs.sourceLanguageCode
-          : "Auto";
+      selectedLanguage = prefs.sourceLanguageCode;
     });
   }
 
