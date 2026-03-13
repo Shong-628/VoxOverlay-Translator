@@ -13,7 +13,7 @@ class LangSourceScreen extends StatefulWidget {
 }
 
 class _LangSourceScreenState extends State<LangSourceScreen> {
-  final List<String> languages = ["Auto", "English", "Malay", "Chinese"];
+  final List<String> languages = ["English", "Malay", "Chinese"];
   String searchText = "";
   String? selectedLanguage;
 

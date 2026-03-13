@@ -1,5 +1,5 @@
 // floating_bubble.dart
-import 'dart:math';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'animated_subtitle.dart';
@@ -27,6 +27,14 @@ class _FloatingBubbleState extends State<FloatingBubble> {
   final double menuRadius = 80.0;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateWindowSize();
+    });
+  }
+
+  @override
   void didUpdateWidget(FloatingBubble oldWidget) {
     super.didUpdateWidget(oldWidget);
     bool wasEmpty = oldWidget.text.trim().isEmpty;
@@ -41,8 +49,10 @@ class _FloatingBubbleState extends State<FloatingBubble> {
     if (expanded) {
       await FlutterOverlayWindow.resizeOverlay(280, 280, true);
     } else if (widget.text.trim().isNotEmpty) {
+      // Use matchParent when text is present so we have the full screen width to draw subtitles
       await FlutterOverlayWindow.resizeOverlay(WindowSize.matchParent, 160, true);
     } else {
+      // Shrink to just the bubble size when idle
       await FlutterOverlayWindow.resizeOverlay(100, 100, true);
     }
   }
@@ -60,7 +70,6 @@ class _FloatingBubbleState extends State<FloatingBubble> {
     _collapseMenu();
   }
 
-  // --- NEW MENU LOGIC WITH ANIMATION TIMING ---
   void _toggleMenu() {
     if (expanded) {
       _collapseMenu();
@@ -71,15 +80,12 @@ class _FloatingBubbleState extends State<FloatingBubble> {
 
   void _expandMenu() {
     setState(() => expanded = true);
-    // Expand window instantly so the outward animation has room to show
     _updateWindowSize();
   }
 
   void _collapseMenu() async {
     setState(() => expanded = false);
-    // Wait for the buttons to animate back to the center BEFORE shrinking the window
     await Future.delayed(const Duration(milliseconds: 300));
-    // Only shrink if the user hasn't re-opened the menu during the wait
     if (!expanded && mounted) {
       _updateWindowSize();
     }
@@ -92,10 +98,14 @@ class _FloatingBubbleState extends State<FloatingBubble> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+
+    // FIX: Safely calculate max width, ensuring it never drops below 0.0
+    final double rawMaxWidth = (screenWidth / 2) - bubbleRadius - 35;
+    final double safeMaxWidth = math.max(0.0, rawMaxWidth);
+
     return Scaffold(
       backgroundColor: Colors.transparent,
-      // FIX 1: SizedBox.expand forces the Stack to fill the entire Android Window size.
-      // This guarantees your expanded buttons will be inside the bounds and clickable.
       body: SizedBox.expand(
         child: Stack(
           clipBehavior: Clip.none,
@@ -104,11 +114,12 @@ class _FloatingBubbleState extends State<FloatingBubble> {
             ..._buildRadialMenu(),
 
             if (!expanded && widget.text.trim().isNotEmpty)
-              Transform.translate(
-                offset: const Offset(120, 0),
+              Positioned(
+                left: (screenWidth / 2) + bubbleRadius + 15,
                 child: IgnorePointer(
                   child: Container(
-                    constraints: const BoxConstraints(maxWidth: 200),
+                    // Apply the safe math calculation here
+                    constraints: BoxConstraints(maxWidth: safeMaxWidth),
                     child: AnimatedSubtitle(
                       text: widget.text,
                       prefs: widget.prefs,
@@ -118,7 +129,6 @@ class _FloatingBubbleState extends State<FloatingBubble> {
               ),
 
             GestureDetector(
-              // FIX 2: Replaced onLongPress with onTap
               onTap: _toggleMenu,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
@@ -157,24 +167,19 @@ class _FloatingBubbleState extends State<FloatingBubble> {
       {'icon': Icons.compress, 'label': 'minimize'},
     ];
 
-    final angles = [-pi / 2, 0.0, pi / 2, pi];
+    final angles = [-math.pi / 2, 0.0, math.pi / 2, math.pi];
 
     return List.generate(4, (index) {
       double distance = expanded ? menuRadius : 0.0;
-      double dx = distance * cos(angles[index]);
-      double dy = distance * sin(angles[index]);
+      double dx = distance * math.cos(angles[index]);
+      double dy = distance * math.sin(angles[index]);
 
-      // FIX 4: Determine rotation. Spins from -180 degrees (-pi) to 0 (upright).
-      double rotation = expanded ? 0.0 : -pi;
+      double rotation = expanded ? 0.0 : -math.pi;
 
-      // FIX 3: Replaced Transform.translate with AnimatedContainer(transform: ...)
       return AnimatedContainer(
-        // Add a slight stagger so the buttons fan out nicely
         duration: Duration(milliseconds: 200 + (index * 40)),
-        curve: Curves.easeOutBack, // Gives a great physical "pop" and bounce
-        // We use the cascade operator (..) to apply rotation directly after translation
+        curve: Curves.easeOutBack,
         transform: Matrix4.translationValues(dx, dy, 0)..rotateZ(rotation),
-        // Ensure it rotates from the center of the button, not the top-left corner
         alignment: Alignment.center,
         child: AnimatedOpacity(
           duration: const Duration(milliseconds: 200),

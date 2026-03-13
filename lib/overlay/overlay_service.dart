@@ -1,6 +1,7 @@
 // overlay_service.dart
 import 'dart:developer' as dev;
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class OverlayService {
   /// Check if overlay permission is granted
@@ -16,8 +17,18 @@ class OverlayService {
   /// Start the overlay window
   static Future<void> startOverlay() async {
     try {
-      bool permission = await hasPermission();
+      // 1. NEW: Check and request Microphone permission first (Android 14+ requirement)
+      var micStatus = await Permission.microphone.status;
+      if (!micStatus.isGranted) {
+        micStatus = await Permission.microphone.request();
+        if (!micStatus.isGranted) {
+          dev.log("Microphone permission denied by user. Cannot start overlay.", name: 'OverlayService');
+          return; // Abort! Do not start the overlay.
+        }
+      }
 
+      // 2. Existing Overlay (System Alert Window) permission check
+      bool permission = await hasPermission();
       if (!permission) {
         await requestPermission();
         permission = await hasPermission();
@@ -30,9 +41,10 @@ class OverlayService {
       bool isActive = await FlutterOverlayWindow.isActive();
       if (isActive) return;
 
+      // 3. Start the overlay only after BOTH permissions are secured
       await FlutterOverlayWindow.showOverlay(
-        height: 200, // Small height
-        width: 200,  // Small width
+        height: 160,
+        width: WindowSize.matchParent,
         alignment: OverlayAlignment.center,
         flag: OverlayFlag.defaultFlag,
         enableDrag: true,

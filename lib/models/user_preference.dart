@@ -19,6 +19,28 @@ class UserPreference {
     this.isTutorialCompleted = false,
   });
 
+  UserPreference copyWith({
+    int? prefId,
+    String? sourceLanguageCode,
+    String? targetLanguageCode,
+    double? fontSizeScale,
+    int? overlayOpacity,
+    String? textColorHex,
+    String? bgColorHex,
+    bool? isTutorialCompleted,
+  }) {
+    return UserPreference(
+      prefId: prefId ?? this.prefId,
+      sourceLanguageCode: sourceLanguageCode ?? this.sourceLanguageCode,
+      targetLanguageCode: targetLanguageCode ?? this.targetLanguageCode,
+      fontSizeScale: fontSizeScale ?? this.fontSizeScale,
+      overlayOpacity: overlayOpacity ?? this.overlayOpacity,
+      textColorHex: textColorHex ?? this.textColorHex,
+      bgColorHex: bgColorHex ?? this.bgColorHex,
+      isTutorialCompleted: isTutorialCompleted ?? this.isTutorialCompleted,
+    );
+  }
+
   factory UserPreference.fromMap(Map<String, dynamic> map) {
     return UserPreference(
       prefId: map['pref_id'],

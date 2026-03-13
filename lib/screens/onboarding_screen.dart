@@ -1,6 +1,7 @@
 // onboarding_screen.dart
 import 'package:flutter/material.dart';
 import 'home_screen.dart';
+import '../db/database_helper.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -35,6 +36,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       "icon": "🚀",
     }
   ];
+
+  Future<void> _completeOnboarding() async {
+    final prefs = await DatabaseHelper.instance.getPreferences();
+    await DatabaseHelper.instance.updatePreferences(
+      prefs.copyWith(isTutorialCompleted: true),
+    );
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -102,10 +116,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     child: ElevatedButton(
                       onPressed: () {
                         if (_currentPage == slides.length - 1) {
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(builder: (_) => const HomeScreen()),
-                          );
+                          _completeOnboarding();
                         } else {
                           _controller.nextPage(
                             duration: const Duration(milliseconds: 400),

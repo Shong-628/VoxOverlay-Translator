@@ -1,4 +1,5 @@
 // overlay_entry.dart
+import 'dart:developer' as dev;
 import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'floating_bubble.dart';
@@ -38,6 +39,7 @@ class _OverlayAppState extends State<OverlayApp> {
 
     // Listen for data from the main app isolate
     FlutterOverlayWindow.overlayListener.listen((data) {
+      dev.log("OVERLAY RECEIVED DATA: $data");
       if (data == null) return;
 
       // 2. Handle dynamically pushed preferences vs standard subtitle text

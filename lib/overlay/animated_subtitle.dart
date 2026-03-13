@@ -1,6 +1,6 @@
 // animated_subtitle.dart
 import 'package:flutter/material.dart';
-import '../models/user_preference.dart'; // Ensure you import your model here
+import '../models/user_preference.dart';
 
 class AnimatedSubtitle extends StatelessWidget {
   final String text;
@@ -31,7 +31,6 @@ class AnimatedSubtitle extends StatelessWidget {
 
     final bgColor = _parseColor(prefs.bgColorHex, prefs.overlayOpacity);
     final textColor = _parseColor(prefs.textColorHex, 100);
-    final double baseFontSize = 16.0;
 
     return IgnorePointer( // Prevents touch interactions on the subtitle
       child: AnimatedSwitcher(
@@ -62,7 +61,8 @@ class AnimatedSubtitle extends StatelessWidget {
             softWrap: true,
             style: TextStyle(
               color: textColor,
-              fontSize: baseFontSize * prefs.fontSizeScale,
+              // FIX: Use the actual font size from the database directly!
+              fontSize: prefs.fontSizeScale,
               fontWeight: FontWeight.w500,
             ),
           ),

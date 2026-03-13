@@ -1,12 +1,13 @@
 // whisper_service.dart
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:developer' as dev;
 import 'dart:typed_data';
 import 'package:whisper_ggml/whisper_ggml.dart';
 
 class WhisperService {
   final WhisperController _whisperController = WhisperController();
-  final WhisperModel _model = WhisperModel.base;
+  final WhisperModel _model = WhisperModel.tiny;
   bool _initialized = false;
 
   // Track files currently being processed to delete them if we force-stop
@@ -20,7 +21,7 @@ class WhisperService {
       final modelPath = await _whisperController.getPath(_model);
       final modelFile = File(modelPath);
 
-      // If the file isn't on the device yet, download it from the internet
+      // If the file isn't on the device yet, download it
       if (!await modelFile.exists()) {
         dev.log("Downloading Whisper model, this may take a moment...", name: 'WhisperService');
         await _whisperController.downloadModel(_model);
@@ -40,25 +41,27 @@ class WhisperService {
     String? convertedWavPath;
     String transcriptionResult = "";
 
-    // Register files for tracking
     _activeFiles.add(audioPath);
 
     try {
       String finalPath = audioPath;
 
-      // 1. Handle PCM conversion
+      // 1. Handle PCM conversion in a BACKGROUND ISOLATE
+      // This prevents the heavy byte manipulation from freezing the UI
       if (audioPath.endsWith('.pcm')) {
-        convertedWavPath = await _convertPcmToWav(audioPath);
+        convertedWavPath = await Isolate.run(() => _convertPcmToWav(audioPath));
+
         if (convertedWavPath != null) {
           _activeFiles.add(convertedWavPath);
           finalPath = convertedWavPath;
         }
       }
 
-      // Check if we stopped during conversion
       if (_isDisposed) return "";
 
       // 2. Perform Transcription
+      // We run this directly. Assuming whisper_ggml uses internal C++ async threads,
+      // this shouldn't block the Dart main thread.
       final result = await _whisperController.transcribe(
         model: _model,
         audioPath: finalPath,
@@ -83,12 +86,10 @@ class WhisperService {
     return transcriptionResult;
   }
 
-  /// Force stop and emergency cleanup
   Future<void> dispose() async {
     _isDisposed = true;
     dev.log("Disposing WhisperService, cleaning active files...", name: 'WhisperService');
 
-    // Create a copy of the set to avoid concurrent modification errors
     final filesToRemove = Set<String>.from(_activeFiles);
     for (var path in filesToRemove) {
       await _deleteFile(path);
@@ -108,7 +109,10 @@ class WhisperService {
     }
   }
 
-  Future<String?> _convertPcmToWav(String pcmPath) async {
+  // --- STATIC METHODS ---
+  // Making this static allows it to run inside Isolate.run() without
+  // copying the entire WhisperService class (and its native pointers) into memory.
+  static Future<String?> _convertPcmToWav(String pcmPath) async {
     try {
       final File pcmFile = File(pcmPath);
       final wavPath = pcmPath.replaceAll('.pcm', '.wav');
@@ -116,8 +120,6 @@ class WhisperService {
       if (!await pcmFile.exists()) return null;
 
       final Uint8List pcmBytes = await pcmFile.readAsBytes();
-
-      if (_isDisposed) return null;
 
       const int sampleRate = 16000;
       const int channels = 1;
@@ -142,14 +144,14 @@ class WhisperService {
       header.setUint8(12, 0x66); // 'f'
       header.setUint8(13, 0x6D); // 'm'
       header.setUint8(14, 0x74); // 't'
-      header.setUint8(15, 0x20); // ' ' (Space) - FIXED: was setUint15
-      header.setUint32(16, 16, Endian.little); // Subchunk1Size
-      header.setUint16(20, 1, Endian.little);  // AudioFormat (1 = PCM)
+      header.setUint8(15, 0x20); // ' '
+      header.setUint32(16, 16, Endian.little);
+      header.setUint16(20, 1, Endian.little);
       header.setUint16(22, channels, Endian.little);
       header.setUint32(24, sampleRate, Endian.little);
       header.setUint32(28, byteRate, Endian.little);
-      header.setUint16(32, channels * bytesPerSample, Endian.little); // BlockAlign
-      header.setUint16(34, bitDepth, Endian.little); // BitsPerSample
+      header.setUint16(32, channels * bytesPerSample, Endian.little);
+      header.setUint16(34, bitDepth, Endian.little);
 
       // data chunk
       header.setUint8(36, 0x64); // 'd'

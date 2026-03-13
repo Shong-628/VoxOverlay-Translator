@@ -1,5 +1,4 @@
 // translation_service.dart
-// translation_service.dart
 import 'dart:developer' as dev;
 import 'package:google_mlkit_translation/google_mlkit_translation.dart';
 import '../db/database_helper.dart';
@@ -8,11 +7,20 @@ class TranslationService {
   OnDeviceTranslator? _translator;
   final _modelManager = OnDeviceTranslatorModelManager();
 
-  // Track current pair to avoid re-initializing the engine unnecessarily
   String _currentSourcePref = "";
   String _currentTargetPref = "";
+  bool _isInitialized = false;
 
-  /// Maps your database/UI strings to Google ML Kit's TranslateLanguage Enums
+  /// Call this once when the app starts, and whenever the user changes settings in the UI
+  Future<void> loadPreferences() async {
+    final prefs = await DatabaseHelper.instance.getPreferences();
+    _currentSourcePref = prefs.sourceLanguageCode;
+    _currentTargetPref = prefs.targetLanguageCode;
+    _isInitialized = true;
+    dev.log("Translation preferences loaded: $_currentSourcePref -> $_currentTargetPref", name: 'TranslationService');
+  }
+
+  /// Maps database/UI strings to Google ML Kit's TranslateLanguage Enums
   TranslateLanguage _mapLanguageToEnum(String languageName) {
     switch (languageName.toLowerCase()) {
       case 'english':
@@ -21,11 +29,6 @@ class TranslationService {
         return TranslateLanguage.malay;
       case 'chinese':
         return TranslateLanguage.chinese;
-    // Note: ML Kit Translation doesn't support 'Auto' natively in the translator instance.
-    // To support 'Auto', you would use the separate `google_mlkit_language_id` package first.
-    // For now, defaulting to English to prevent crashes.
-      case 'auto':
-        return TranslateLanguage.english;
       default:
         return TranslateLanguage.english;
     }
@@ -47,60 +50,55 @@ class TranslationService {
     }
   }
 
-  /// Translates the text based on current DB preferences
+  /// Translates the text based on cached preferences
   Future<String> translate(String text) async {
     if (text.isEmpty) return "";
 
     try {
-      // 1. Fetch latest preferences
-      final prefs = await DatabaseHelper.instance.getPreferences();
-      final sourcePref = prefs.sourceLanguageCode;
-      final targetPref = prefs.targetLanguageCode;
+      // Ensure we have preferences loaded
+      if (!_isInitialized) {
+        await loadPreferences();
+      }
 
-      // 2. Early Exits
-      if (targetPref.toLowerCase() == 'none' || sourcePref.toLowerCase() == targetPref.toLowerCase()) {
+      // 1. Early Exits
+      if (_currentTargetPref.toLowerCase() == 'none' ||
+          _currentSourcePref.toLowerCase() == _currentTargetPref.toLowerCase()) {
         return text;
       }
 
-      // 3. Convert string preferences to ML Kit enums
-      final sourceLang = _mapLanguageToEnum(sourcePref);
-      final targetLang = _mapLanguageToEnum(targetPref);
+      // 2. Convert string preferences to ML Kit enums
+      final sourceLang = _mapLanguageToEnum(_currentSourcePref);
+      final targetLang = _mapLanguageToEnum(_currentTargetPref);
 
-      // 4. Initialize or Update the Translator ONLY if the language pair changed
-      if (_translator == null || _currentSourcePref != sourcePref || _currentTargetPref != targetPref) {
-
-        // Close old translator to free up memory before making a new one
-        _translator?.close();
-
-        // Make sure the ML models are on the device (requires internet the very first time)
-        await _ensureModelsDownloaded(sourceLang, targetLang);
-
-        _translator = OnDeviceTranslator(
-          sourceLanguage: sourceLang,
-          targetLanguage: targetLang,
-        );
-
-        _currentSourcePref = sourcePref;
-        _currentTargetPref = targetPref;
-        dev.log("Translator initialized for: ${sourceLang.name} -> ${targetLang.name}", name: 'TranslationService');
+      // 3. Initialize or Update the Translator ONLY if it hasn't been set up yet
+      // (If languages change, loadPreferences() should be called, which will trigger a re-init here if we added logic for it,
+      // but to keep it simple, we check if the translator matches our current cache)
+      if (_translator == null) {
+        await _setupNewTranslator(sourceLang, targetLang);
       }
 
-      // 5. Direct translation (ML Kit handles pivoting internally!)
+      // 4. Direct translation
       final String result = await _translator!.translateText(text);
       return result;
 
     } catch (e, stackTrace) {
-      dev.log(
-        "Translation error",
-        name: 'TranslationService',
-        error: e,
-        stackTrace: stackTrace,
-      );
+      dev.log("Translation error", name: 'TranslationService', error: e, stackTrace: stackTrace);
       return text;
     }
   }
 
-  /// Clean up resources when your app closes or the service is destroyed
+  Future<void> _setupNewTranslator(TranslateLanguage sourceLang, TranslateLanguage targetLang) async {
+    _translator?.close(); // Close old translator
+    await _ensureModelsDownloaded(sourceLang, targetLang);
+
+    _translator = OnDeviceTranslator(
+      sourceLanguage: sourceLang,
+      targetLanguage: targetLang,
+    );
+    dev.log("Translator initialized for: ${sourceLang.name} -> ${targetLang.name}", name: 'TranslationService');
+  }
+
+  /// Clean up resources when your app closes
   void dispose() {
     _translator?.close();
   }
