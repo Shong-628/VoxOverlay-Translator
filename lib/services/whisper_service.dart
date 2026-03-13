@@ -60,8 +60,8 @@ class WhisperService {
     String result = "";
 
     try {
-      // Direct RAM to RAM transcription via C++
-      result = _whisperFFI.transcribe(audioFloats);
+      // FIX: Added the 'await' keyword here since FFI now uses Isolate.run()
+      result = await _whisperFFI.transcribe(audioFloats);
     } catch (e) {
       dev.log("Native transcription error", name: 'WhisperService', error: e);
     } finally {

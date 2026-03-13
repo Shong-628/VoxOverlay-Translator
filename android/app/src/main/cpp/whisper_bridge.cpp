@@ -2,6 +2,8 @@
 #include "whisper.h"
 #include <string>
 #include <vector>
+#include <thread>
+#include <algorithm>
 
 extern "C" {
 // 1. Initialize the model
@@ -20,7 +22,11 @@ const char* bridge_whisper_transcribe(struct whisper_context* ctx, float* pcmf32
     wparams.print_progress = false;
     wparams.print_timestamps = false;
     wparams.single_segment = true;
-    wparams.language = "en"; // Set to "auto" if you want auto-detect
+    wparams.language = "en";
+    // Set to auto if want to enable auto language detection
+
+    // Android CPU threads
+    wparams.n_threads = std::min(4, (int)std::thread::hardware_concurrency());
 
     if (whisper_full(ctx, wparams, pcmf32, n_samples) != 0) {
         return ""; // Failed to process
