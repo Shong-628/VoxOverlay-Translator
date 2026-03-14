@@ -178,18 +178,6 @@ class HomeScreen extends StatelessWidget {
 
             const SizedBox(height: 40),
 
-            // Mic Visualizer Section
-            Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                MicInputVisualizer(),
-                SizedBox(height: 20),
-                Icon(Icons.mic, size: 40),
-              ],
-            ),
-
-            const SizedBox(height: 30),
-
             Text(
               pipeline.isRunning
                   ? "Translation is active.\nCheck the overlay for subtitles."
@@ -200,6 +188,55 @@ class HomeScreen extends StatelessWidget {
                 fontSize: 16,
               ),
             ),
+
+            // Mic Test Visualizer Section
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: colorScheme.outlineVariant,
+                ),
+              ),
+              child: Column(
+                children: const [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.mic, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        "Microphone Test",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 6),
+                  Text(
+                    "Use this tool to verify that your device microphone is working correctly.",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  SizedBox(height: 20),
+                  MicInputVisualizer(),
+                  SizedBox(height: 10),
+                  Icon(
+                    Icons.mic,
+                    size: 40,
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 30),
           ],
         ),
       ),

@@ -19,12 +19,13 @@ class _MicInputVisualizerState extends State<MicInputVisualizer> {
   double _amplitude = 0.0;
 
   bool _hasInput = false;
+  bool _isTesting = false;
+
   DateTime _lastInputTime = DateTime.now();
 
   @override
   void initState() {
     super.initState();
-    _start();
   }
 
   Future<void> _start() async {
@@ -32,6 +33,10 @@ class _MicInputVisualizerState extends State<MicInputVisualizer> {
     if (!status.isGranted) return;
 
     _noiseMeter = NoiseMeter();
+
+    setState(() {
+      _isTesting = true;
+    });
 
     _subscription = _noiseMeter!.noise.listen(
           (reading) {
@@ -54,6 +59,17 @@ class _MicInputVisualizerState extends State<MicInputVisualizer> {
         debugPrint(err.toString());
       },
     );
+  }
+
+  Future<void> _stop() async {
+    await _subscription?.cancel();
+    _subscription = null;
+
+    setState(() {
+      _isTesting = false;
+      _hasInput = false;
+      _amplitude = 0.0;
+    });
   }
 
   @override
@@ -128,17 +144,33 @@ class _MicInputVisualizerState extends State<MicInputVisualizer> {
             fontWeight: FontWeight.bold,
           ),
         ),
+
+        const SizedBox(height: 20),
+
+        ElevatedButton.icon(
+          onPressed: _isTesting ? _stop : _start,
+          icon: Icon(_isTesting ? Icons.stop : Icons.mic),
+          label: Text(_isTesting ? "Stop Test" : "Test Microphone"),
+        ),
       ],
     );
   }
 }
+
 // import '../widgets/mic_input_visualizer.dart';
 // Example usage:
 // Column(
 // mainAxisAlignment: MainAxisAlignment.center,
-// children: [
+// children: const [
+//
 // MicInputVisualizer(),
+//
 // SizedBox(height: 20),
-// Icon(Icons.mic, size: 40),
+//
+// Icon(
+// Icons.mic,
+// size: 40,
+// ),
+//
 // ],
 // )
