@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer' as dev;
 import 'package:flutter/foundation.dart';
 import 'package:google_mlkit_translation/google_mlkit_translation.dart';
@@ -15,6 +16,16 @@ class TranslationService extends ChangeNotifier {
   bool _isInitialized = false;
   bool get isInitialized => _isInitialized;
 
+  // --- UI Loading State ---
+  String _setupStatus = "Initializing translation engine...";
+  String get setupStatus => _setupStatus;
+
+  // --- Real-time Streaming State ---
+  Timer? _debounceTimer;
+  Completer<String>? _activeCompleter;
+  String _lastInput = "";
+  String _lastOutput = "";
+
   /// Supported languages for the app
   static const supportedLanguages = [
     TranslateLanguage.english,
@@ -22,7 +33,6 @@ class TranslationService extends ChangeNotifier {
     TranslateLanguage.chinese,
   ];
 
-  /// Initializes translation system and downloads required models
   Future<void> initialize() async {
     final prefs = await DatabaseHelper.instance.getPreferences();
 
@@ -32,12 +42,12 @@ class TranslationService extends ChangeNotifier {
     await _predownloadModels();
 
     _isInitialized = true;
+    _setupStatus = "Ready";
     notifyListeners();
 
     dev.log("TranslationService initialized", name: "TranslationService");
   }
 
-  /// Maps stored names to ML Kit enums
   TranslateLanguage _mapLanguage(String name) {
     switch (name.toLowerCase()) {
       case 'english':
@@ -51,14 +61,18 @@ class TranslationService extends ChangeNotifier {
     }
   }
 
-  /// Downloads all supported models in parallel
+  /// Downloads all supported models in parallel and updates UI status
   Future<void> _predownloadModels() async {
     final futures = supportedLanguages.map((lang) async {
       final downloaded = await _modelManager.isModelDownloaded(lang.bcpCode);
 
       if (!downloaded) {
-        dev.log("Downloading model: ${lang.name}",
-            name: "TranslationService");
+        dev.log("Downloading model: ${lang.name}", name: "TranslationService");
+
+        // Update UI. (If multiple download at once, it shows the latest triggered)
+        _setupStatus = "Downloading offline model: ${lang.name}\n(This only happens once)";
+        notifyListeners();
+
         await _modelManager.downloadModel(lang.bcpCode);
       }
     });
@@ -66,7 +80,6 @@ class TranslationService extends ChangeNotifier {
     await Future.wait(futures);
   }
 
-  /// Returns cached translator or creates a new one
   Future<OnDeviceTranslator> _getTranslator(
       TranslateLanguage source,
       TranslateLanguage target,
@@ -83,14 +96,12 @@ class TranslationService extends ChangeNotifier {
     );
 
     _translatorCache[key] = translator;
-
     dev.log("Translator cached: $key", name: "TranslationService");
-
     return translator;
   }
 
-  /// Main translation function
   Future<String> translate(String text) async {
+    text = text.trim();
     if (text.isEmpty || !_isInitialized) return text;
 
     if (_targetPref.toLowerCase() == 'none' ||
@@ -98,47 +109,67 @@ class TranslationService extends ChangeNotifier {
       return text;
     }
 
-    try {
-      final sourceLang = _mapLanguage(_sourcePref);
-      final targetLang = _mapLanguage(_targetPref);
+    if (text == _lastInput) {
+      return _lastOutput;
+    }
 
-      final translator = await _getTranslator(sourceLang, targetLang);
+    _debounceTimer?.cancel();
 
-      return await translator.translateText(text);
-    } catch (e, stackTrace) {
-      dev.log(
-        "Translation error",
-        name: "TranslationService",
-        error: e,
-        stackTrace: stackTrace,
-      );
+    if (_activeCompleter != null && !_activeCompleter!.isCompleted) {
+      _activeCompleter!.complete(_lastOutput.isNotEmpty ? _lastOutput : text);
+    }
 
-      return text;
+    final completer = Completer<String>();
+    _activeCompleter = completer;
+
+    _debounceTimer = Timer(const Duration(milliseconds: 250), () async {
+      try {
+        final sourceLang = _mapLanguage(_sourcePref);
+        final targetLang = _mapLanguage(_targetPref);
+
+        final translator = await _getTranslator(sourceLang, targetLang);
+        final result = await translator.translateText(text);
+
+        _lastInput = text;
+        _lastOutput = result;
+
+        if (!completer.isCompleted) completer.complete(result);
+      } catch (e, stackTrace) {
+        dev.log("Translation error", name: "TranslationService", error: e);
+        if (!completer.isCompleted) completer.complete(text);
+      }
+    });
+
+    return completer.future;
+  }
+
+  void resetCache() {
+    _lastInput = "";
+    _lastOutput = "";
+    _debounceTimer?.cancel();
+    if (_activeCompleter != null && !_activeCompleter!.isCompleted) {
+      _activeCompleter!.complete("");
     }
   }
 
-  /// Update preferences when user changes settings
   Future<void> reloadPreferences() async {
     final prefs = await DatabaseHelper.instance.getPreferences();
-
     _sourcePref = prefs.sourceLanguageCode;
     _targetPref = prefs.targetLanguageCode;
-
-    dev.log(
-      "Preferences updated: $_sourcePref -> $_targetPref",
-      name: "TranslationService",
-    );
+    dev.log("Preferences updated: $_sourcePref -> $_targetPref", name: "TranslationService");
   }
 
-  /// Dispose all cached translators
   @override
   void dispose() {
+    _debounceTimer?.cancel();
+    if (_activeCompleter != null && !_activeCompleter!.isCompleted) {
+      _activeCompleter!.complete("");
+    }
+
     for (final translator in _translatorCache.values) {
       translator.close();
     }
-
     _translatorCache.clear();
-
     super.dispose();
   }
 }

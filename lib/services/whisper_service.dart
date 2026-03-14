@@ -1,10 +1,11 @@
 // lib/whisper_service.dart
+import 'dart:async';
 import 'dart:developer' as dev;
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
 import '../whisper_ffi.dart';
-import 'dart:typed_data';
 
 class WhisperService {
   static final WhisperService _instance = WhisperService._internal();
@@ -14,13 +15,19 @@ class WhisperService {
   final WhisperFFI _whisperFFI = WhisperFFI();
 
   bool _initialized = false;
-  bool _isInitializing = false;
+  Future<void>? _initFuture;
   bool _isTranscribing = false;
 
-  Future<void> initialize() async {
-    if (_initialized || _isInitializing) return;
-    _isInitializing = true;
+  /// Safe, concurrent-proof initialization
+  Future<void> initialize() {
+    if (_initialized) return Future.value();
 
+    // If an initialization is already running, wait for it instead of skipping
+    _initFuture ??= _performInitialization();
+    return _initFuture!;
+  }
+
+  Future<void> _performInitialization() async {
     try {
       dev.log("Initializing Native Whisper...", name: 'WhisperService');
       final modelPath = await _ensureModelIsReady();
@@ -35,7 +42,8 @@ class WhisperService {
     } catch (e) {
       dev.log("Failed to init native Whisper", name: 'WhisperService', error: e);
     } finally {
-      _isInitializing = false;
+      // Clear the future so we can retry if it failed
+      _initFuture = null;
     }
   }
 
@@ -43,6 +51,7 @@ class WhisperService {
     final docDir = await getApplicationDocumentsDirectory();
     final modelFile = File('${docDir.path}/ggml-tiny.bin');
 
+    // Quick size check to ensure the file isn't corrupted or partially written
     if (!await modelFile.exists() || await modelFile.length() < 5 * 1024 * 1024) {
       dev.log("Copying Whisper model to local storage...", name: 'WhisperService');
       final ByteData assetData = await rootBundle.load('assets/models/ggml-tiny.bin');
@@ -51,16 +60,17 @@ class WhisperService {
     return modelFile.path;
   }
 
-  // Notice: We now accept a List<double> from RAM, NOT a file path!
-  Future<String> transcribe(List<double> audioFloats) async {
+  /// Takes a typed Float32List for faster FFI memory mapping
+  Future<String> transcribe(Float32List audioFloats) async {
     if (!_initialized) await initialize();
+
+    // Fail fast if empty or locked
     if (audioFloats.isEmpty || _isTranscribing) return "";
 
     _isTranscribing = true;
     String result = "";
 
     try {
-      // FIX: Added the 'await' keyword here since FFI now uses Isolate.run()
       result = await _whisperFFI.transcribe(audioFloats);
     } catch (e) {
       dev.log("Native transcription error", name: 'WhisperService', error: e);

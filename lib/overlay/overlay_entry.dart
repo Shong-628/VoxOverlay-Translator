@@ -1,4 +1,4 @@
-// overlay_entry.dart
+// lib/overlay/overlay_entry.dart
 import 'dart:developer' as dev;
 import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
@@ -12,9 +12,9 @@ class OverlayApp extends StatefulWidget {
 }
 
 class _OverlayAppState extends State<OverlayApp> {
-  String subtitle = "...";
+  String subtitle = ""; // Start empty so it hides correctly
 
-  // Fallback default preference so the UI can render immediately
+  // Fallback default preference
   UserPreference _currentPrefs = UserPreference(
     sourceLanguageCode: 'en',
     targetLanguageCode: 'en',
@@ -29,34 +29,34 @@ class _OverlayAppState extends State<OverlayApp> {
   void initState() {
     super.initState();
 
-    // Listen for live updates (e.g., if user changes settings while overlay is open)
     FlutterOverlayWindow.overlayListener.listen((data) {
-      dev.log("OVERLAY RECEIVED DATA: $data");
       if (data == null) return;
 
-      if (data is Map && data.containsKey('target_language_code')) {
-        setState(() {
-          _currentPrefs = UserPreference.fromMap(Map<String, dynamic>.from(data));
-        });
+      if (data is Map) {
+        // Only parse Maps if they contain our specific settings key
+        if (data.containsKey('target_language_code')) {
+          setState(() {
+            _currentPrefs = UserPreference.fromMap(Map<String, dynamic>.from(data));
+          });
+        }
+        // IGNORE all other maps (like {"action": "close"}, {"status": "ready"})
       }
-      else if (data is Map && data.containsKey('text')) {
-        setState(() => subtitle = data['text'].toString());
-      }
-      else {
-        setState(() => subtitle = data.toString());
+      // STRICTLY check for strings to update the subtitle
+      else if (data is String) {
+        setState(() => subtitle = data);
       }
     });
+
+    // Ping the main app that we are alive
     FlutterOverlayWindow.shareData({"status": "ready"});
   }
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      type: MaterialType.transparency,
-      child: FloatingBubble(
-        text: subtitle,
-        prefs: _currentPrefs,
-      ),
+    // Removed the redundant Material wrapper since floating_bubble uses Scaffold
+    return FloatingBubble(
+      text: subtitle,
+      prefs: _currentPrefs,
     );
   }
 }

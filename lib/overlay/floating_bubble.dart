@@ -46,7 +46,9 @@ class _FloatingBubbleState extends State<FloatingBubble> {
   }
 
   Future<void> _updateWindowSize() async {
-    await Future.delayed(const Duration(milliseconds: 200));
+    // CRITICAL: Prevent missing widget crashes by ensuring the UI is still active
+    if (!mounted) return;
+
     try {
       if (expanded) {
         await FlutterOverlayWindow.resizeOverlay(280, 280, true);
@@ -91,10 +93,10 @@ class _FloatingBubbleState extends State<FloatingBubble> {
     _updateWindowSize();
   }
 
-  void _collapseMenu() async {
+  void _collapseMenu() {
     setState(() => expanded = false);
-    await Future.delayed(const Duration(milliseconds: 300));
-    if (!expanded && mounted) {
+    // Removed the animation delay so the state syncs instantly with the window resize
+    if (mounted) {
       _updateWindowSize();
     }
   }
@@ -106,7 +108,7 @@ class _FloatingBubbleState extends State<FloatingBubble> {
 
     // Using the image asset when collapsed
     return Image.asset(
-      'assets/icon.png', // Ensure this matches your pubspec.yaml path exactly
+      'assets/icon/icon.png',
       width: 28,
       height: 28,
       key: const ValueKey('app_icon'),
@@ -148,8 +150,7 @@ class _FloatingBubbleState extends State<FloatingBubble> {
 
             GestureDetector(
               onTap: _toggleMenu,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
+              child: Container(
                 width: bubbleRadius * 2,
                 height: bubbleRadius * 2,
                 decoration: BoxDecoration(
@@ -159,10 +160,7 @@ class _FloatingBubbleState extends State<FloatingBubble> {
                   boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 8)],
                 ),
                 child: Center(
-                  child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 280),
-                    child: _getCenterWidget(),
-                  ),
+                  child: _getCenterWidget(),
                 ),
               ),
             ),
@@ -173,6 +171,9 @@ class _FloatingBubbleState extends State<FloatingBubble> {
   }
 
   List<Widget> _buildRadialMenu() {
+    // If not expanded, don't build or render the buttons at all
+    if (!expanded) return [];
+
     final actions = [
       {'icon': Icons.settings, 'label': 'settings'},
       {'icon': isPlaying ? Icons.pause : Icons.play_arrow, 'label': 'toggle'},
@@ -184,30 +185,17 @@ class _FloatingBubbleState extends State<FloatingBubble> {
 
     // FIX: Use actions.length to prevent the RangeError crash
     return List.generate(actions.length, (index) {
-      double distance = expanded ? menuRadius : 0.0;
-      double dx = distance * math.cos(angles[index]);
-      double dy = distance * math.sin(angles[index]);
+      double dx = menuRadius * math.cos(angles[index]);
+      double dy = menuRadius * math.sin(angles[index]);
 
-      double rotation = expanded ? 0.0 : -math.pi;
-
-      return AnimatedContainer(
-        duration: Duration(milliseconds: 200 + (index * 40)),
-        curve: Curves.easeOutBack,
-        transform: Matrix4.translationValues(dx, dy, 0)..rotateZ(rotation),
-        alignment: Alignment.center,
-        child: AnimatedOpacity(
-          duration: const Duration(milliseconds: 200),
-          opacity: expanded ? 1.0 : 0.0,
-          child: IgnorePointer(
-            ignoring: !expanded,
-            child: IconButton.filled(
-              onPressed: () => _handleAction(actions[index]['label'] as String),
-              icon: Icon(actions[index]['icon'] as IconData, color: Colors.white),
-              style: IconButton.styleFrom(
-                backgroundColor: Colors.deepPurple,
-                padding: const EdgeInsets.all(12),
-              ),
-            ),
+      return Transform.translate(
+        offset: Offset(dx, dy),
+        child: IconButton.filled(
+          onPressed: () => _handleAction(actions[index]['label'] as String),
+          icon: Icon(actions[index]['icon'] as IconData, color: Colors.white),
+          style: IconButton.styleFrom(
+            backgroundColor: Colors.deepPurple,
+            padding: const EdgeInsets.all(12),
           ),
         ),
       );

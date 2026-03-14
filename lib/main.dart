@@ -19,7 +19,6 @@ import 'overlay/overlay_entry.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-// overlay entry point
 @pragma("vm:entry-point")
 void overlayMain() {
   runApp(const MaterialApp(
@@ -55,19 +54,27 @@ class _AppInitializerState extends State<AppInitializer> {
   }
 
   Future<void> _initialize() async {
-    await Future.wait([
-      _audioPipeline.initialize(),
-      _settingsController.loadSettings(),
-      _translationService.initialize(),
-    ]);
+    try {
+      await _settingsController.loadSettings();
+      final prefs = await DatabaseHelper.instance.getPreferences();
+      _tutorialDone = prefs.isTutorialCompleted;
 
-    final prefs = await DatabaseHelper.instance.getPreferences();
-    _tutorialDone = prefs.isTutorialCompleted;
+      _setupOverlayListener();
 
-    _setupOverlayListener();
+      // Increased timeout to 3 minutes. Initial download of 3 ML Kit models
+      // can take a while on slower networks. Subsequent app launches will
+      // skip the download and pass this in milliseconds.
+      await Future.wait([
+        _audioPipeline.initialize(),
+        _translationService.initialize(),
+      ]).timeout(const Duration(minutes: 3));
 
-    if (mounted) {
-      setState(() => _initialized = true);
+    } catch (e) {
+      debugPrint("Initialization warning/error: $e");
+    } finally {
+      if (mounted) {
+        setState(() => _initialized = true);
+      }
     }
   }
 
@@ -80,14 +87,12 @@ class _AppInitializerState extends State<AppInitializer> {
           case 'toggle':
             _audioPipeline.togglePipeline();
             break;
-
           case 'settings':
             _audioPipeline.stopPipeline();
             navigatorKey.currentState?.push(
               MaterialPageRoute(builder: (_) => const SettingsScreen()),
             );
             break;
-
           case 'close':
             _audioPipeline.stopPipeline();
             break;
@@ -99,10 +104,39 @@ class _AppInitializerState extends State<AppInitializer> {
   @override
   Widget build(BuildContext context) {
     if (!_initialized) {
-      return const MaterialApp(
+      return MaterialApp(
         debugShowCheckedModeBanner: false,
+        theme: ThemeData.dark(useMaterial3: true), // Dark theme looks better for loading
         home: Scaffold(
-          body: Center(child: CircularProgressIndicator()),
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 30),
+                  const Text(
+                    "Setting up VoxOverlay",
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  // ListenableBuilder listens to the TranslationService
+                  // and updates this text dynamically as models download
+                  ListenableBuilder(
+                    listenable: _translationService,
+                    builder: (context, child) {
+                      return Text(
+                        _translationService.setupStatus,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.grey, fontSize: 14),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       );
     }

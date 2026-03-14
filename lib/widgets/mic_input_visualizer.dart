@@ -91,18 +91,25 @@ class _MicInputVisualizerState extends State<MicInputVisualizer> {
     return Column(
       children: [
 
-        const Text(
-          "Microphone Test",
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
+        Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.mic, size: 20),
+          const SizedBox(width: 8),
+          const Text(
+            "Microphone Test",
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
           ),
+        ],
         ),
 
         const SizedBox(height: 4),
 
         const Text(
-          "Speak into the microphone to verify input detection",
+          "Use this tool to verify that your device microphone is working correctly.",
           style: TextStyle(
             fontSize: 12,
             color: Colors.grey,
@@ -156,21 +163,3 @@ class _MicInputVisualizerState extends State<MicInputVisualizer> {
     );
   }
 }
-
-// import '../widgets/mic_input_visualizer.dart';
-// Example usage:
-// Column(
-// mainAxisAlignment: MainAxisAlignment.center,
-// children: const [
-//
-// MicInputVisualizer(),
-//
-// SizedBox(height: 20),
-//
-// Icon(
-// Icons.mic,
-// size: 40,
-// ),
-//
-// ],
-// )
