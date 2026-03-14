@@ -7,6 +7,9 @@ import '../overlay/overlay_service.dart';
 import 'settings_screen.dart';
 import 'onboarding_screen.dart';
 
+import '../widgets/mic_input_visualizer.dart';
+// Testing widgets
+
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -165,11 +168,6 @@ class HomeScreen extends StatelessWidget {
             // Status Indicator
             _StatusCard(isRunning: pipeline.isRunning),
 
-            if (pipeline.isRunning) ...[
-              const SizedBox(height: 30),
-              _MicVisualizer(level: pipeline.micLevel),
-            ],
-
             const SizedBox(height: 60),
 
             // Main Action Button
@@ -179,6 +177,18 @@ class HomeScreen extends StatelessWidget {
             ),
 
             const SizedBox(height: 40),
+
+            // Mic Visualizer Section
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                MicInputVisualizer(),
+                SizedBox(height: 20),
+                Icon(Icons.mic, size: 40),
+              ],
+            ),
+
+            const SizedBox(height: 30),
 
             Text(
               pipeline.isRunning
@@ -246,63 +256,6 @@ class _StatusCard extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _MicVisualizer extends StatelessWidget {
-  final double level;
-
-  const _MicVisualizer({required this.level});
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    double iconSize = 40 + (level * 30);
-
-    return Column(
-      children: [
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          width: iconSize,
-          height: iconSize,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: colorScheme.primaryContainer,
-          ),
-          child: Icon(
-            Icons.mic,
-            color: colorScheme.primary,
-            size: iconSize * 0.6,
-          ),
-        ),
-        const SizedBox(height: 16),
-        SizedBox(
-          height: 40,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(
-              7,
-                  (index) {
-                double multiplier = (index + 1) / 7;
-                double barHeight = 6 + (level * 30 * multiplier);
-
-                return AnimatedContainer(
-                  duration: const Duration(milliseconds: 120),
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  width: 6,
-                  height: barHeight,
-                  decoration: BoxDecoration(
-                    color: colorScheme.primary,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
