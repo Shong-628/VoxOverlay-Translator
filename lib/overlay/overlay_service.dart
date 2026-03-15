@@ -45,8 +45,8 @@ class OverlayService {
         enableDrag: true,
       );
 
-      // CRITICAL FIX: Wait for the OverlayApp to initialize and send the 'ready'
-      // ping before we blast the preferences over the channel.
+      // Wait for the OverlayApp to initialize and send the 'ready'
+      // ping before blasting the preferences over the channel.
       try {
         await _overlayReadyCompleter!.future.timeout(const Duration(seconds: 5));
       } catch (e) {
@@ -76,7 +76,6 @@ class OverlayService {
     try {
       if (!await FlutterOverlayWindow.isActive()) {
         await startOverlay();
-        // Removed the redundant completer check here since startOverlay() now handles it securely
       }
 
       await FlutterOverlayWindow.shareData(text);

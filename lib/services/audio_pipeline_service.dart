@@ -30,6 +30,9 @@ class AudioPipelineService extends ChangeNotifier {
   bool get isRunning => _running;
   bool _isProcessing = false;
 
+  bool _isPaused = false;
+  bool get isPaused => _isPaused;
+
   // Configuration for real-time streaming
   static const int _sampleRate = 16000;
   static const int _minChunkBytes = 8000; // Process every 0.25s
@@ -49,6 +52,7 @@ class AudioPipelineService extends ChangeNotifier {
     if (!await _recorder.hasPermission()) return;
 
     _running = true;
+    _isPaused = false;
     _isProcessing = false;
     _byteBuffer.clear();
     _contextBuffer.clear();
@@ -66,6 +70,9 @@ class AudioPipelineService extends ChangeNotifier {
     );
 
     _audioStreamSubscription = stream.listen((data) {
+      // Discard Audio if stream is paused
+      if (_isPaused) return;
+
       _byteBuffer.addAll(data);
       if (_byteBuffer.length >= _minChunkBytes && !_isProcessing) {
         _processAudioChunk();
@@ -155,6 +162,22 @@ class AudioPipelineService extends ChangeNotifier {
   }
 
   void togglePipeline() {
-    _running ? stopPipeline() : startPipeline();
+    if (!_running) {
+      startPipeline();
+    } else {
+      _isPaused = !_isPaused;
+      if (_isPaused) {
+        _byteBuffer.clear();
+        _contextBuffer.clear();
+      }
+      notifyListeners();
+    }
+  }
+
+  void forcePause() {
+    if (_running && !_isPaused) {
+      _isPaused = true;
+      notifyListeners();
+    }
   }
 }

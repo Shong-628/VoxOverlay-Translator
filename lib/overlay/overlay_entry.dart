@@ -25,7 +25,6 @@ class _OverlayAppState extends State<OverlayApp> {
         _handleMapData(data);
       }
       else if (data is String) {
-        // PERF FIX: Only try to decode if the string actually looks like a JSON Map.
         // This prevents throwing/catching FormatExceptions on every single plain-text subtitle.
         if (data.trimLeft().startsWith('{')) {
           try {

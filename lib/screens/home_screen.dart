@@ -168,13 +168,17 @@ class HomeScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               // Status Indicator
-              _StatusCard(isRunning: pipeline.isRunning),
+              _StatusCard(
+                isRunning: pipeline.isRunning,
+                isPaused: pipeline.isPaused,
+              ),
 
               const SizedBox(height: 60),
 
               // Main Action Button
               _StartStopButton(
                 isRunning: pipeline.isRunning,
+                isPaused: pipeline.isPaused, // <-- Add this
                 onPressed: () => _handleTogglePipeline(context, pipeline),
               ),
 
@@ -265,21 +269,38 @@ class HomeScreen extends StatelessWidget {
 
 class _StatusCard extends StatelessWidget {
   final bool isRunning;
-  const _StatusCard({required this.isRunning});
+  final bool isPaused; // <-- Added isPaused
+
+  const _StatusCard({required this.isRunning, required this.isPaused});
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
+    // Determine the state colors and text
+    Color statusColor;
+    String statusText;
+
+    if (!isRunning) {
+      statusColor = colorScheme.onSurfaceVariant;
+      statusText = "SERVICE STOPPED";
+    } else if (isPaused) {
+      statusColor = Colors.orange;
+      statusText = "SERVICE PAUSED";
+    } else {
+      statusColor = Colors.green;
+      statusText = "SERVICE RUNNING";
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       decoration: BoxDecoration(
         color: isRunning
-            ? colorScheme.primaryContainer.withAlpha(76)
+            ? (isPaused ? Colors.orange.withAlpha(50) : colorScheme.primaryContainer.withAlpha(76))
             : colorScheme.surfaceContainerHighest.withAlpha(76),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: isRunning ? colorScheme.primary : colorScheme.outline,
+          color: isRunning ? statusColor : colorScheme.outline,
           width: 2,
         ),
       ),
@@ -290,11 +311,11 @@ class _StatusCard extends StatelessWidget {
             width: 12,
             height: 12,
             decoration: BoxDecoration(
-              color: isRunning ? Colors.green : Colors.red,
+              color: statusColor,
               shape: BoxShape.circle,
               boxShadow: isRunning ? [
                 BoxShadow(
-                  color: Colors.green.withAlpha(127),
+                  color: statusColor.withAlpha(127),
                   blurRadius: 8,
                   spreadRadius: 2,
                 )
@@ -303,11 +324,11 @@ class _StatusCard extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Text(
-            isRunning ? "SERVICE RUNNING" : "SERVICE STOPPED",
+            statusText,
             style: TextStyle(
               fontWeight: FontWeight.bold,
               letterSpacing: 1.2,
-              color: isRunning ? colorScheme.primary : colorScheme.onSurfaceVariant,
+              color: isRunning ? statusColor : colorScheme.onSurfaceVariant,
             ),
           ),
         ],
@@ -318,13 +339,27 @@ class _StatusCard extends StatelessWidget {
 
 class _StartStopButton extends StatelessWidget {
   final bool isRunning;
+  final bool isPaused; // <-- Added isPaused
   final VoidCallback onPressed;
 
-  const _StartStopButton({required this.isRunning, required this.onPressed});
+  const _StartStopButton({
+    required this.isRunning,
+    required this.isPaused,
+    required this.onPressed
+  });
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+
+    // If running but paused, let's show an orange/amber theme. Otherwise red for Stop, primary for Start.
+    Color buttonColor = !isRunning
+        ? colorScheme.primaryContainer
+        : (isPaused ? Colors.orange.shade200 : colorScheme.errorContainer);
+
+    Color iconColor = !isRunning
+        ? colorScheme.onPrimaryContainer
+        : (isPaused ? Colors.orange.shade900 : colorScheme.onErrorContainer);
 
     return GestureDetector(
       onTap: onPressed,
@@ -334,10 +369,10 @@ class _StartStopButton extends StatelessWidget {
         height: 180,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: isRunning ? colorScheme.errorContainer : colorScheme.primaryContainer,
+          color: buttonColor,
           boxShadow: [
             BoxShadow(
-              color: (isRunning ? colorScheme.error : colorScheme.primary).withAlpha(76),
+              color: buttonColor.withAlpha(150),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
@@ -347,16 +382,16 @@ class _StartStopButton extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              isRunning ? Icons.stop_rounded : Icons.play_arrow_rounded,
+              !isRunning ? Icons.play_arrow_rounded : Icons.stop_rounded,
               size: 80,
-              color: isRunning ? colorScheme.onErrorContainer : colorScheme.onPrimaryContainer,
+              color: iconColor,
             ),
             Text(
-              isRunning ? "STOP" : "START",
+              !isRunning ? "START" : "STOP",
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: isRunning ? colorScheme.onErrorContainer : colorScheme.onPrimaryContainer,
+                color: iconColor,
               ),
             ),
           ],

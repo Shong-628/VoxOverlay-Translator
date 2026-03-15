@@ -89,25 +89,22 @@ class _AppInitializerState extends State<AppInitializer> {
             break;
 
           case 'settings':
-            _audioPipeline.stopPipeline();
+            _audioPipeline.forcePause(); // Soft pause, don't stop!
             NativeWindowService.bringAppToForeground();
 
-            Future.delayed(const Duration(milliseconds: 300), () {
-              final context = navigatorKey.currentContext;
-              if (context != null && context.mounted) {
-                // Pop any existing dialogs/screens back to the Home Screen first
-                navigatorKey.currentState?.popUntil((route) => route.isFirst);
-
-                // Then push the Settings Screen so it doesn't stack infinitely
-                navigatorKey.currentState?.push(
-                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
-                );
-              }
+            Future.delayed(const Duration(milliseconds: 500), () {
+              // Safely push using currentState (bypasses context mounting issues)
+              navigatorKey.currentState?.popUntil((route) => route.isFirst);
+              navigatorKey.currentState?.push(
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
             });
             break;
 
           case 'close':
+          // Main app now securely shuts down both systems.
             _audioPipeline.stopPipeline();
+            OverlayService.stopOverlay();
             break;
         }
       }

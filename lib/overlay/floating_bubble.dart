@@ -123,7 +123,7 @@ class _FloatingBubbleState extends State<FloatingBubble> {
 
     switch (action) {
       case 'close':
-        FlutterOverlayWindow.closeOverlay();
+        _collapseMenu();
         return;
       case 'settings':
         _collapseMenu();
