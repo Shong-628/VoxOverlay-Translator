@@ -1,4 +1,5 @@
 // lib/overlay/overlay_entry.dart
+import 'dart:convert';
 import 'dart:developer' as dev;
 import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
@@ -12,18 +13,10 @@ class OverlayApp extends StatefulWidget {
 }
 
 class _OverlayAppState extends State<OverlayApp> {
-  String subtitle = ""; // Start empty so it hides correctly
+  String subtitle = "";
 
-  // Fallback default preference
-  UserPreference _currentPrefs = UserPreference(
-    sourceLanguageCode: 'en',
-    targetLanguageCode: 'en',
-    fontSizeScale: 18.0,
-    overlayOpacity: 80,
-    textColorHex: '#FFFFFF',
-    bgColorHex: '#000000',
-    isTutorialCompleted: true,
-  );
+  // 1. Make it nullable so we don't accidentally render fake defaults.
+  UserPreference? _currentPrefs;
 
   @override
   void initState() {
@@ -32,31 +25,49 @@ class _OverlayAppState extends State<OverlayApp> {
     FlutterOverlayWindow.overlayListener.listen((data) {
       if (data == null) return;
 
+      // 2. Safely handle if data is a Map
       if (data is Map) {
-        // Only parse Maps if they contain our specific settings key
-        if (data.containsKey('target_language_code')) {
-          setState(() {
-            _currentPrefs = UserPreference.fromMap(Map<String, dynamic>.from(data));
-          });
-        }
-        // IGNORE all other maps (like {"action": "close"}, {"status": "ready"})
+        _handleMapData(data);
       }
-      // STRICTLY check for strings to update the subtitle
+      // 3. Handle Strings (Subtitles OR JSON Strings)
       else if (data is String) {
-        setState(() => subtitle = data);
+        try {
+          // Sometimes platform channels send Maps as JSON strings.
+          // Let's check if this string is actually our settings JSON.
+          final decoded = jsonDecode(data);
+          if (decoded is Map) {
+            _handleMapData(decoded);
+            return; // Exit early so we don't set the subtitle to a JSON blob
+          }
+        } catch (_) {
+          // If jsonDecode fails, it's a regular subtitle string.
+          setState(() => subtitle = data);
+        }
       }
     });
 
-    // Ping the main app that we are alive
+    // 4. Ping the main app that we are ready to receive data
     FlutterOverlayWindow.shareData({"status": "ready"});
+  }
+
+  void _handleMapData(Map dynamicData) {
+    if (dynamicData.containsKey('target_language_code')) {
+      setState(() {
+        _currentPrefs = UserPreference.fromMap(Map<String, dynamic>.from(dynamicData));
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Removed the redundant Material wrapper since floating_bubble uses Scaffold
+    // 5. Do not render the bubble at all until real preferences arrive
+    if (_currentPrefs == null) {
+      return const SizedBox.shrink();
+    }
+
     return FloatingBubble(
       text: subtitle,
-      prefs: _currentPrefs,
+      prefs: _currentPrefs!, // Safe to use '!' here
     );
   }
 }

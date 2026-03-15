@@ -80,26 +80,42 @@ class _AppInitializerState extends State<AppInitializer> {
   }
 
   void _setupOverlayListener() {
-    FlutterOverlayWindow.overlayListener.listen((data) {
+    // 1. Make the listener callback async so we can await the database
+    FlutterOverlayWindow.overlayListener.listen((data) async {
       OverlayService.handleSystemMessage(data);
 
-      if (data is Map && data.containsKey('action')) {
-        switch (data['action']) {
-          case 'toggle':
-            _audioPipeline.togglePipeline();
-            break;
-          case 'settings':
-            _audioPipeline.stopPipeline();
-            // 1. Change the Flutter UI
-            navigatorKey.currentState?.push(
-              MaterialPageRoute(builder: (_) => const SettingsScreen()),
-            );
-            // 2. Force Android to pull the app to the front!
-            NativeWindowService.bringAppToForeground();
-            break;
-          case 'close':
-            _audioPipeline.stopPipeline();
-            break;
+      if (data is Map) {
+
+        // 2. ADD THIS: Complete the handshake when the overlay boots up
+        if (data['status'] == 'ready') {
+          try {
+            // Fetch the latest preferences
+            final prefs = await DatabaseHelper.instance.getPreferences();
+            // Send the settings map over to the overlay isolate
+            FlutterOverlayWindow.shareData(prefs.toMap());
+          } catch (e) {
+            debugPrint("Failed to send preferences to overlay: $e");
+          }
+          return; // Exit early so we don't process it as an action
+        }
+
+        // 3. Your existing action handling remains the same
+        if (data.containsKey('action')) {
+          switch (data['action']) {
+            case 'toggle':
+              _audioPipeline.togglePipeline();
+              break;
+            case 'settings':
+              _audioPipeline.stopPipeline();
+              navigatorKey.currentState?.push(
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
+              NativeWindowService.bringAppToForeground();
+              break;
+            case 'close':
+              _audioPipeline.stopPipeline();
+              break;
+          }
         }
       }
     });

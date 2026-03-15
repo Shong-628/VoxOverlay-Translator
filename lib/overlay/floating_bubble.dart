@@ -70,7 +70,7 @@ class _FloatingBubbleState extends State<FloatingBubble> {
         FlutterOverlayWindow.closeOverlay();
         return;
       case 'settings':
-        FlutterOverlayWindow.closeOverlay();
+        // wait for listener from main
         return;
       case 'toggle':
         setState(() => isPlaying = !isPlaying);
@@ -118,15 +118,18 @@ class _FloatingBubbleState extends State<FloatingBubble> {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
+    // FIX 1: Bypass the buggy MediaQuery and get the raw, instant hardware screen metrics
+    final view = View.of(context);
+    final logicalWidth = view.display.size.width / view.display.devicePixelRatio;
 
-    // FIX: Safely calculate max width, ensuring it never drops below 0.0
-    final double rawMaxWidth = (screenWidth / 2) - bubbleRadius - 35;
-    final double safeMaxWidth = math.max(0.0, rawMaxWidth);
+    // Safely calculate max width (half the screen, minus the bubble, with a hard minimum)
+    final double safeMaxWidth = math.max(150.0, (logicalWidth / 2) - bubbleRadius - 20);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: SizedBox.expand(
+      // FIX 2: Use Center instead of SizedBox.expand. This forces the Stack
+      // to shrink exactly to the size of the bubble (60x60).
+      body: Center(
         child: Stack(
           clipBehavior: Clip.none,
           alignment: Alignment.center,
@@ -135,10 +138,11 @@ class _FloatingBubbleState extends State<FloatingBubble> {
 
             if (!expanded && widget.text.trim().isNotEmpty)
               Positioned(
-                left: (screenWidth / 2) + bubbleRadius + 15,
+                // Because the Stack is 60x60, 'left' is measured from the left edge of the bubble.
+                // 60 (bubble diameter) + 15 (padding) anchors the text perfectly to the right!
+                left: (bubbleRadius * 2) + 15,
                 child: IgnorePointer(
                   child: Container(
-                    // Apply the safe math calculation here
                     constraints: BoxConstraints(maxWidth: safeMaxWidth),
                     child: AnimatedSubtitle(
                       text: widget.text,
