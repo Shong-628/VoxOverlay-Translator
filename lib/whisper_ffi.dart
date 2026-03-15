@@ -2,7 +2,7 @@
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:isolate';
-import 'dart:typed_data'; // Added for Float32List
+import 'dart:typed_data';
 import 'package:ffi/ffi.dart';
 
 // --- FFI Type Definitions ---
@@ -11,6 +11,10 @@ typedef BridgeWhisperInitDart = Pointer<Void> Function(Pointer<Utf8> modelPath);
 
 typedef BridgeWhisperTranscribeC = Pointer<Utf8> Function(Pointer<Void> ctx, Pointer<Float> pcmf32, Int32 n_samples);
 typedef BridgeWhisperTranscribeDart = Pointer<Utf8> Function(Pointer<Void> ctx, Pointer<Float> pcmf32, int n_samples);
+
+// NEW: Definitions for freeing the string
+typedef BridgeWhisperFreeStringC = Void Function(Pointer<Utf8> str);
+typedef BridgeWhisperFreeStringDart = void Function(Pointer<Utf8> str);
 
 typedef BridgeWhisperFreeC = Void Function(Pointer<Void> ctx);
 typedef BridgeWhisperFreeDart = void Function(Pointer<Void> ctx);
@@ -39,7 +43,6 @@ class WhisperFFI {
     return _context != null && _context!.address != 0;
   }
 
-  // Updated to Float32List to match the WhisperService optimization
   Future<String> transcribe(Float32List audioData) async {
     if (_context == null || _context!.address == 0) return "";
 
@@ -51,20 +54,29 @@ class WhisperFFI {
           : DynamicLibrary.process();
 
       final transcribeFunc = lib.lookupFunction<BridgeWhisperTranscribeC, BridgeWhisperTranscribeDart>('bridge_whisper_transcribe');
+      // NEW: Lookup the free string function inside the Isolate
+      final freeStringFunc = lib.lookupFunction<BridgeWhisperFreeStringC, BridgeWhisperFreeStringDart>('bridge_whisper_free_string');
 
       final isolateContext = Pointer<Void>.fromAddress(contextAddress);
 
-      // 1. Allocate native memory
+      // 1. Allocate native memory for audio
       final Pointer<Float> audioPtr = malloc.allocate<Float>(audioData.length * sizeOf<Float>());
 
-      // 2. FAST COPY: Map native memory to Dart and copy instantly (No for-loop required)
+      // 2. Map native memory to Dart and copy
       audioPtr.asTypedList(audioData.length).setAll(0, audioData);
 
       // 3. Run inference
       final Pointer<Utf8> resultPtr = transcribeFunc(isolateContext, audioPtr, audioData.length);
-      final String text = resultPtr.toDartString();
 
-      // 4. Memory Cleanup
+      String text = "";
+      if (resultPtr != nullptr) {
+        // Copy the C string into Dart memory
+        text = resultPtr.toDartString();
+        // 4. Clean up the C string memory safely!
+        freeStringFunc(resultPtr);
+      }
+
+      // 5. Clean up audio memory
       malloc.free(audioPtr);
 
       return text.trim();

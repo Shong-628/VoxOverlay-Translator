@@ -21,8 +21,19 @@ android {
         versionName = flutter.versionName
 
         ndk {
-            abiFilters.add("armeabi-v7a")
-            abiFilters.add("arm64-v8a")
+            // Added x86_64 so you can test on PC Android Emulators.
+            // It will be automatically stripped out by Google Play when you publish.
+            abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86_64"))
+        }
+
+        // --- CRITICAL: Pass arguments to CMake ---
+        externalNativeBuild {
+            cmake {
+                // Force Release build for the C++ code to guarantee fast inference speed
+                arguments += listOf("-DCMAKE_BUILD_TYPE=Release")
+                // Explicitly tell the NDK to use NEON instructions for ARM
+                arguments += listOf("-DANDROID_ARM_NEON=ON")
+            }
         }
     }
     compileOptions {

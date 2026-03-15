@@ -80,42 +80,35 @@ class _AppInitializerState extends State<AppInitializer> {
   }
 
   void _setupOverlayListener() {
-    // 1. Make the listener callback async so we can await the database
-    FlutterOverlayWindow.overlayListener.listen((data) async {
+    // No need to make this async anymore since OverlayService handles the DB call
+    FlutterOverlayWindow.overlayListener.listen((data) {
+
+      // 1. Pass the raw data to the service. If it's the "ready" ping,
+      // the service completes its internal lock and syncs the preferences safely.
       OverlayService.handleSystemMessage(data);
 
-      if (data is Map) {
+      // 2. Handle the user tapping buttons on the overlay
+      if (data is Map && data.containsKey('action')) {
+        switch (data['action']) {
+          case 'toggle':
+            _audioPipeline.togglePipeline();
+            break;
 
-        // 2. ADD THIS: Complete the handshake when the overlay boots up
-        if (data['status'] == 'ready') {
-          try {
-            // Fetch the latest preferences
-            final prefs = await DatabaseHelper.instance.getPreferences();
-            // Send the settings map over to the overlay isolate
-            FlutterOverlayWindow.shareData(prefs.toMap());
-          } catch (e) {
-            debugPrint("Failed to send preferences to overlay: $e");
-          }
-          return; // Exit early so we don't process it as an action
-        }
+          case 'settings':
+            _audioPipeline.stopPipeline();
+            // Best practice: Bring the app to the foreground BEFORE pushing the route
+            // so the engine is fully attached and awake when the transition happens
+            NativeWindowService.bringAppToForeground();
+            navigatorKey.currentState?.push(
+              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+            );
+            break;
 
-        // 3. Your existing action handling remains the same
-        if (data.containsKey('action')) {
-          switch (data['action']) {
-            case 'toggle':
-              _audioPipeline.togglePipeline();
-              break;
-            case 'settings':
-              _audioPipeline.stopPipeline();
-              navigatorKey.currentState?.push(
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
-              );
-              NativeWindowService.bringAppToForeground();
-              break;
-            case 'close':
-              _audioPipeline.stopPipeline();
-              break;
-          }
+          case 'close':
+          // Perfect: The overlay UI closes itself natively, and this listener
+          // catches the message to cleanly shut down the heavy audio processing.
+            _audioPipeline.stopPipeline();
+            break;
         }
       }
     });

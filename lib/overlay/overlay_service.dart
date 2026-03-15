@@ -1,9 +1,8 @@
-// lib/overlay/overlay_service.dart
 import 'dart:async';
 import 'dart:developer' as dev;
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import '../db/database_helper.dart';
-import '../models/user_preference.dart'; // Make sure to import this
+import '../models/user_preference.dart';
 
 class OverlayService {
   static Completer<bool>? _overlayReadyCompleter;
@@ -46,6 +45,14 @@ class OverlayService {
         enableDrag: true,
       );
 
+      // CRITICAL FIX: Wait for the OverlayApp to initialize and send the 'ready'
+      // ping before we blast the preferences over the channel.
+      try {
+        await _overlayReadyCompleter!.future.timeout(const Duration(seconds: 5));
+      } catch (e) {
+        dev.log("Timeout waiting for overlay to be ready.", name: 'OverlayService');
+      }
+
       final prefs = await DatabaseHelper.instance.getPreferences();
       await FlutterOverlayWindow.shareData(prefs.toMap());
 
@@ -63,19 +70,13 @@ class OverlayService {
     }
   }
 
-  /// Send only pure strings to prevent the UI from parsing JSON strings
   static Future<void> showSubtitle(String text) async {
     if (text.trim().isEmpty) return;
 
     try {
       if (!await FlutterOverlayWindow.isActive()) {
         await startOverlay();
-        if (_overlayReadyCompleter != null) {
-          await _overlayReadyCompleter!.future.timeout(
-            const Duration(seconds: 5),
-            onTimeout: () => false,
-          );
-        }
+        // Removed the redundant completer check here since startOverlay() now handles it securely
       }
 
       await FlutterOverlayWindow.shareData(text);
@@ -84,7 +85,6 @@ class OverlayService {
     }
   }
 
-  /// NEW: Call this from your SettingsController whenever a user changes a setting!
   static Future<void> syncPreferences(UserPreference prefs) async {
     try {
       if (await FlutterOverlayWindow.isActive()) {

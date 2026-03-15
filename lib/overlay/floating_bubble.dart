@@ -1,8 +1,8 @@
 // floating_bubble.dart
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
-import 'animated_subtitle.dart';
 import '../models/user_preference.dart';
 
 class FloatingBubble extends StatefulWidget {
@@ -23,6 +23,10 @@ class _FloatingBubbleState extends State<FloatingBubble> {
   bool expanded = false;
   bool isPlaying = true;
 
+  // FIX 3: Added a resize lock and queue to handle rapid text streaming
+  bool _isResizing = false;
+  bool _resizeQueued = false;
+
   final double bubbleRadius = 30.0;
   final double menuRadius = 80.0;
 
@@ -37,28 +41,78 @@ class _FloatingBubbleState extends State<FloatingBubble> {
   @override
   void didUpdateWidget(FloatingBubble oldWidget) {
     super.didUpdateWidget(oldWidget);
-    bool wasEmpty = oldWidget.text.trim().isEmpty;
-    bool isEmpty = widget.text.trim().isEmpty;
 
-    if (wasEmpty != isEmpty) {
+    // CRITICAL FIX: Trigger resize on ANY text change, not just empty/non-empty.
+    // This allows the window to constantly resize as text wraps to new lines.
+    if (oldWidget.text != widget.text) {
       _updateWindowSize();
     }
+  }
+
+  /// Dynamically measures the exact pixel height needed for the text
+  int _calculateDynamicHeight(BuildContext? context) {
+    if (expanded) return 280;
+    if (widget.text.trim().isEmpty) return 100;
+
+    // Safely get logical width
+    final view = context != null ? View.of(context) : ui.PlatformDispatcher.instance.views.first;
+    final logicalWidth = view.physicalSize.width / view.devicePixelRatio;
+    final double safeMaxWidth = math.max(150.0, logicalWidth - 40);
+
+    // Simulate drawing the text to get its exact height
+    final span = TextSpan(
+      text: widget.text,
+      style: TextStyle(fontSize: widget.prefs.fontSizeScale),
+    );
+
+    final tp = TextPainter(
+      text: span,
+      textAlign: TextAlign.center,
+      textDirection: TextDirection.ltr,
+    );
+
+    // Layout the text within our safe bounds minus horizontal padding (12 * 2 = 24)
+    tp.layout(maxWidth: safeMaxWidth - 24);
+
+    // Base Stack (100) + Top Padding (10) + Vertical Text Padding (12) + Text Height + Bottom Padding (15)
+    final totalHeight = 100.0 + 10.0 + 12.0 + tp.size.height + 15.0;
+
+    return totalHeight.ceil();
   }
 
   Future<void> _updateWindowSize() async {
     // CRITICAL: Prevent missing widget crashes by ensuring the UI is still active
     if (!mounted) return;
 
+    // If already resizing, queue the request so we don't drop frame updates during streaming
+    if (_isResizing) {
+      _resizeQueued = true;
+      return;
+    }
+
+    _isResizing = true;
+
     try {
       if (expanded) {
         await FlutterOverlayWindow.resizeOverlay(280, 280, true);
       } else if (widget.text.trim().isNotEmpty) {
-        await FlutterOverlayWindow.resizeOverlay(WindowSize.matchParent, 160, true);
+        // Feed the perfectly calculated height directly to the Android window
+        int dynHeight = _calculateDynamicHeight(context);
+        await FlutterOverlayWindow.resizeOverlay(WindowSize.matchParent, dynHeight, true);
       } else {
         await FlutterOverlayWindow.resizeOverlay(100, 100, true);
       }
     } catch (e) {
       debugPrint("Resize overlay failed: $e");
+    } finally {
+      if (mounted) {
+        _isResizing = false;
+        // Process the queue if text changed rapidly while we were resizing
+        if (_resizeQueued) {
+          _resizeQueued = false;
+          _updateWindowSize();
+        }
+      }
     }
   }
 
@@ -70,17 +124,25 @@ class _FloatingBubbleState extends State<FloatingBubble> {
         FlutterOverlayWindow.closeOverlay();
         return;
       case 'settings':
-        // wait for listener from main
+      // wait for listener from main
         return;
       case 'toggle':
-        setState(() => isPlaying = !isPlaying);
-        break;
+      // FIX 5: Combined the setState calls so the widget only rebuilds once
+        setState(() {
+          isPlaying = !isPlaying;
+          expanded = false;
+        });
+        if (mounted) _updateWindowSize();
+        return; // Exit early since we manually collapsed it here
     }
 
     _collapseMenu();
   }
 
   void _toggleMenu() {
+    // Ignore taps if the window is currently resizing
+    if (_isResizing) return;
+
     if (expanded) {
       _collapseMenu();
     } else {
@@ -116,72 +178,108 @@ class _FloatingBubbleState extends State<FloatingBubble> {
     );
   }
 
+  /// Helper to convert hex strings exactly the same way SettingsScreen does
+  Color _hexToColor(String hexString) {
+    try {
+      final buffer = StringBuffer();
+      if (hexString.length == 6 || hexString.length == 7) buffer.write('ff');
+      buffer.write(hexString.replaceFirst('#', ''));
+      return Color(int.parse(buffer.toString(), radix: 16));
+    } catch (e) {
+      return Colors.black; // Fallback
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // FIX 1: Bypass the buggy MediaQuery and get the raw, instant hardware screen metrics
     final view = View.of(context);
     final logicalWidth = view.display.size.width / view.display.devicePixelRatio;
 
-    // Safely calculate max width (half the screen, minus the bubble, with a hard minimum)
-    final double safeMaxWidth = math.max(150.0, (logicalWidth / 2) - bubbleRadius - 20);
+    // Safely calculate max width
+    final double safeMaxWidth = math.max(150.0, logicalWidth - 40);
+
+    // Determine the exact boundaries of the widget to match the Android window.
+    final double currentWidth = expanded ? 280.0 : (widget.text.trim().isNotEmpty ? logicalWidth : 100.0);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      // FIX 2: Use Center instead of SizedBox.expand. This forces the Stack
-      // to shrink exactly to the size of the bubble (60x60).
-      body: Center(
-        child: Stack(
-          clipBehavior: Clip.none,
-          alignment: Alignment.center,
-          children: [
-            ..._buildRadialMenu(),
+      body: SizedBox(
+        width: currentWidth,
+        child: Align(
+          alignment: Alignment.topCenter,
+          // REFACTOR: Changed Stack to Column. This physically prevents the bubble
+          // from jumping around the screen when the window resizes dynamically.
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // MAIN BUBBLE & RADIAL MENU
+              SizedBox(
+                width: expanded ? 280.0 : 100.0,
+                height: expanded ? 280.0 : 100.0,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.center,
+                  children: [
+                    ..._buildRadialMenu(),
+                    GestureDetector(
+                      onTap: _toggleMenu,
+                      child: Container(
+                        width: bubbleRadius * 2,
+                        height: bubbleRadius * 2,
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.9),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white24, width: 2),
+                          boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 8)],
+                        ),
+                        child: Center(
+                          child: _getCenterWidget(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
-            if (!expanded && widget.text.trim().isNotEmpty)
-              Positioned(
-                // Because the Stack is 60x60, 'left' is measured from the left edge of the bubble.
-                // 60 (bubble diameter) + 15 (padding) anchors the text perfectly to the right!
-                left: (bubbleRadius * 2) + 15,
-                child: IgnorePointer(
-                  child: Container(
-                    constraints: BoxConstraints(maxWidth: safeMaxWidth),
-                    child: AnimatedSubtitle(
-                      text: widget.text,
-                      prefs: widget.prefs,
+              // SUBTITLE DISPLAY (100% Identical to Settings Preview)
+              if (!expanded && widget.text.trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10, bottom: 15),
+                  child: IgnorePointer(
+                    child: Container(
+                      constraints: BoxConstraints(maxWidth: safeMaxWidth),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: _hexToColor(widget.prefs.bgColorHex).withOpacity(widget.prefs.overlayOpacity / 100.0),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        widget.text,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: _hexToColor(widget.prefs.textColorHex),
+                          fontSize: widget.prefs.fontSizeScale,
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-
-            GestureDetector(
-              onTap: _toggleMenu,
-              child: Container(
-                width: bubbleRadius * 2,
-                height: bubbleRadius * 2,
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.9),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white24, width: 2),
-                  boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 8)],
-                ),
-                child: Center(
-                  child: _getCenterWidget(),
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
   List<Widget> _buildRadialMenu() {
-    // If not expanded, don't build or render the buttons at all
-    if (!expanded) return [];
+    // We now build the buttons even when collapsed so the implicit animations can shrink/fade them seamlessly.
 
-    final actions = [
-      {'icon': Icons.settings, 'label': 'settings'},
-      {'icon': isPlaying ? Icons.pause : Icons.play_arrow, 'label': 'toggle'},
-      {'icon': Icons.power_settings_new, 'label': 'close'},
+    // FIX 2: Replaced Map<String, dynamic> with Dart Records for total type safety
+    final actions = <({IconData icon, String label})>[
+      (icon: Icons.settings, label: 'settings'),
+      (icon: isPlaying ? Icons.pause : Icons.play_arrow, label: 'toggle'),
+      (icon: Icons.power_settings_new, label: 'close'),
     ];
 
     // Adjusted for 3 buttons instead of 4 so they spread out properly
@@ -194,12 +292,23 @@ class _FloatingBubbleState extends State<FloatingBubble> {
 
       return Transform.translate(
         offset: Offset(dx, dy),
-        child: IconButton.filled(
-          onPressed: () => _handleAction(actions[index]['label'] as String),
-          icon: Icon(actions[index]['icon'] as IconData, color: Colors.white),
-          style: IconButton.styleFrom(
-            backgroundColor: Colors.deepPurple,
-            padding: const EdgeInsets.all(12),
+        // FIX 4: Added AnimatedScale and AnimatedOpacity for smooth pop-out UX
+        child: AnimatedScale(
+          scale: expanded ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOutBack,
+          child: AnimatedOpacity(
+            opacity: expanded ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 150),
+            child: IconButton.filled(
+              // Disable the button when collapsed to prevent ghost clicks
+              onPressed: expanded ? () => _handleAction(actions[index].label) : null,
+              icon: Icon(actions[index].icon, color: Colors.white),
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.deepPurple,
+                padding: const EdgeInsets.all(12),
+              ),
+            ),
           ),
         ),
       );

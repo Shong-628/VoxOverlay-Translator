@@ -46,12 +46,15 @@ class UserPreference {
       prefId: map['pref_id'],
       sourceLanguageCode: map['source_language_code'],
       targetLanguageCode: map['target_language_code'],
-      fontSizeScale: map['font_size_scale'],
-      overlayOpacity: map['overlay_opacity'],
+
+      // FIX: Safely parse as num first, then convert to double.
+      // Added a fallback of 14.0 just in case the value is completely missing.
+      fontSizeScale: (map['font_size_scale'] as num?)?.toDouble() ?? 14.0,
+      overlayOpacity: (map['overlay_opacity'] as num?)?.toInt() ?? 100,
+
       textColorHex: map['text_color_hex'],
       bgColorHex: map['bg_color_hex'],
-      isTutorialCompleted:
-      map['is_tutorial_completed'] == 1 || map['is_tutorial_completed'] == true,
+      isTutorialCompleted: map['is_tutorial_completed'] == 1 || map['is_tutorial_completed'] == true,
     );
   }
 
