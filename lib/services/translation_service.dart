@@ -1,3 +1,4 @@
+// lib/translation_service.dart
 import 'dart:async';
 import 'dart:developer' as dev;
 import 'package:flutter/foundation.dart';
@@ -5,10 +6,11 @@ import 'package:google_mlkit_translation/google_mlkit_translation.dart';
 import '../db/database_helper.dart';
 
 class TranslationService extends ChangeNotifier {
-  final OnDeviceTranslatorModelManager _modelManager =
-  OnDeviceTranslatorModelManager();
-
+  final OnDeviceTranslatorModelManager _modelManager = OnDeviceTranslatorModelManager();
   final Map<String, OnDeviceTranslator> _translatorCache = {};
+
+  // NEW: Keep track of confirmed downloaded models to prevent network calls
+  final Set<String> _downloadedModels = {};
 
   String _sourcePref = "";
   String _targetPref = "";
@@ -16,17 +18,14 @@ class TranslationService extends ChangeNotifier {
   bool _isInitialized = false;
   bool get isInitialized => _isInitialized;
 
-  // --- UI Loading State ---
   String _setupStatus = "Initializing translation engine...";
   String get setupStatus => _setupStatus;
 
-  // --- Real-time Streaming State ---
   Timer? _debounceTimer;
   Completer<String>? _activeCompleter;
   String _lastInput = "";
   String _lastOutput = "";
 
-  /// Supported languages for the app
   static const supportedLanguages = [
     TranslateLanguage.english,
     TranslateLanguage.malay,
@@ -61,42 +60,46 @@ class TranslationService extends ChangeNotifier {
     }
   }
 
-  /// Downloads all supported models in parallel and updates UI status
   Future<void> _predownloadModels() async {
     final futures = supportedLanguages.map((lang) async {
-      final downloaded = await _modelManager.isModelDownloaded(lang.bcpCode);
+      try {
+        bool downloaded = await _modelManager.isModelDownloaded(lang.bcpCode);
 
-      if (!downloaded) {
-        dev.log("Downloading model: ${lang.name}", name: "TranslationService");
+        if (!downloaded) {
+          dev.log("Downloading model: ${lang.name}", name: "TranslationService");
+          _setupStatus = "Downloading offline model: ${lang.name}\n(This only happens once)";
+          notifyListeners();
 
-        // Update UI. (If multiple download at once, it shows the latest triggered)
-        _setupStatus = "Downloading offline model: ${lang.name}\n(This only happens once)";
-        notifyListeners();
+          // Attempt to download. This returns a boolean in newer ML Kit versions,
+          // or just completes silently if successful.
+          await _modelManager.downloadModel(lang.bcpCode);
 
-        await _modelManager.downloadModel(lang.bcpCode);
+          // Verify again just to be safe
+          downloaded = await _modelManager.isModelDownloaded(lang.bcpCode);
+        }
+
+        // If definitively downloaded, add it to our safe list
+        if (downloaded) {
+          _downloadedModels.add(lang.bcpCode);
+          dev.log("${lang.name} is ready for offline use.", name: "TranslationService");
+        }
+      } catch (e) {
+        dev.log("Failed to download or verify ${lang.name}", name: "TranslationService", error: e);
       }
     });
 
     await Future.wait(futures);
   }
 
-  Future<OnDeviceTranslator> _getTranslator(
-      TranslateLanguage source,
-      TranslateLanguage target,
-      ) async {
+  Future<OnDeviceTranslator> _getTranslator(TranslateLanguage source, TranslateLanguage target) async {
     final key = "${source.bcpCode}_${target.bcpCode}";
 
     if (_translatorCache.containsKey(key)) {
       return _translatorCache[key]!;
     }
 
-    final translator = OnDeviceTranslator(
-      sourceLanguage: source,
-      targetLanguage: target,
-    );
-
+    final translator = OnDeviceTranslator(sourceLanguage: source, targetLanguage: target);
     _translatorCache[key] = translator;
-    dev.log("Translator cached: $key", name: "TranslationService");
     return translator;
   }
 
@@ -113,6 +116,16 @@ class TranslationService extends ChangeNotifier {
       return _lastOutput;
     }
 
+    final sourceLang = _mapLanguage(_sourcePref);
+    final targetLang = _mapLanguage(_targetPref);
+
+    // NEW STRICT OFFLINE CHECK: If models aren't locally verified, bypass ML Kit entirely
+    if (!_downloadedModels.contains(sourceLang.bcpCode) ||
+        !_downloadedModels.contains(targetLang.bcpCode)) {
+      dev.log("Models missing offline. Passing through raw text.", name: "TranslationService");
+      return text;
+    }
+
     _debounceTimer?.cancel();
 
     if (_activeCompleter != null && !_activeCompleter!.isCompleted) {
@@ -124,9 +137,6 @@ class TranslationService extends ChangeNotifier {
 
     _debounceTimer = Timer(const Duration(milliseconds: 250), () async {
       try {
-        final sourceLang = _mapLanguage(_sourcePref);
-        final targetLang = _mapLanguage(_targetPref);
-
         final translator = await _getTranslator(sourceLang, targetLang);
         final result = await translator.translateText(text);
 
@@ -134,7 +144,7 @@ class TranslationService extends ChangeNotifier {
         _lastOutput = result;
 
         if (!completer.isCompleted) completer.complete(result);
-      } catch (e, stackTrace) {
+      } catch (e) {
         dev.log("Translation error", name: "TranslationService", error: e);
         if (!completer.isCompleted) completer.complete(text);
       }
@@ -156,7 +166,7 @@ class TranslationService extends ChangeNotifier {
     final prefs = await DatabaseHelper.instance.getPreferences();
     _sourcePref = prefs.sourceLanguageCode;
     _targetPref = prefs.targetLanguageCode;
-    dev.log("Preferences updated: $_sourcePref -> $_targetPref", name: "TranslationService");
+    dev.log("Translation preferences instantly updated: $_sourcePref -> $_targetPref", name: "TranslationService");
   }
 
   @override
@@ -165,7 +175,6 @@ class TranslationService extends ChangeNotifier {
     if (_activeCompleter != null && !_activeCompleter!.isCompleted) {
       _activeCompleter!.complete("");
     }
-
     for (final translator in _translatorCache.values) {
       translator.close();
     }

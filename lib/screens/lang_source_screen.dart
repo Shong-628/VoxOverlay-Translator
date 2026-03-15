@@ -1,9 +1,12 @@
-// lang_source_screen.dart
-
+// lib/screens/lang_source_screen.dart
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:provider/provider.dart'; // NEW: Added Provider import
+
 import '../db/database_helper.dart';
 import '../models/user_preference.dart';
+import '../overlay/overlay_service.dart';
+import '../services/translation_service.dart'; // NEW: Adjust this path if your TranslationService is in a different folder
 
 class LangSourceScreen extends StatefulWidget {
   const LangSourceScreen({super.key});
@@ -44,7 +47,16 @@ class _LangSourceScreenState extends State<LangSourceScreen> {
       isTutorialCompleted: prefs.isTutorialCompleted,
     );
 
+    // 1. Save to database
     await DatabaseHelper.instance.updatePreferences(updatedPrefs);
+
+    // 2. INSTANT SYNC: Push to the active overlay immediately
+    await OverlayService.syncPreferences(updatedPrefs);
+
+    // 3. INSTANT SYNC: Update the translation engine logic
+    if (mounted) {
+      context.read<TranslationService>().reloadPreferences();
+    }
 
     Fluttertoast.showToast(msg: "Source language set to $language");
 
@@ -53,7 +65,6 @@ class _LangSourceScreenState extends State<LangSourceScreen> {
     });
 
     Future.delayed(const Duration(milliseconds: 500), () {
-      // FIX: Ensure the widget is still on screen before popping
       if (!mounted) return;
       Navigator.pop(context, language);
     });

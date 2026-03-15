@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'services/translation_service.dart';
 import 'services/audio_pipeline_service.dart';
 import 'services/settings_controller.dart';
+import 'services/native_window_service.dart';
 
 import 'screens/onboarding_screen.dart';
 import 'screens/settings_screen.dart';
@@ -89,9 +90,12 @@ class _AppInitializerState extends State<AppInitializer> {
             break;
           case 'settings':
             _audioPipeline.stopPipeline();
+            // 1. Change the Flutter UI
             navigatorKey.currentState?.push(
               MaterialPageRoute(builder: (_) => const SettingsScreen()),
             );
+            // 2. Force Android to pull the app to the front!
+            NativeWindowService.bringAppToForeground();
             break;
           case 'close':
             _audioPipeline.stopPipeline();

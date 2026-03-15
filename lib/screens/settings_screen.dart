@@ -1,13 +1,16 @@
-// settings_screen.dart
+// lib/screens/settings_screen.dart
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
+
 import '../db/database_helper.dart';
 import '../models/user_preference.dart';
-import 'lang_source_screen.dart';
-import 'lang_target_screen.dart';
-import 'package:provider/provider.dart';
 import '../services/settings_controller.dart';
 import '../extensions/context_extensions.dart';
+import '../overlay/overlay_service.dart'; // NEW: Added overlay service import
+
+import 'lang_source_screen.dart';
+import 'lang_target_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -77,6 +80,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _updateDbPrefs() async {
     if (_userPrefs == null) return;
+
     final updatedPrefs = UserPreference(
       prefId: _userPrefs!.prefId,
       sourceLanguageCode: sourceLanguage,
@@ -87,8 +91,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       bgColorHex: bgColorHex,
       isTutorialCompleted: _userPrefs!.isTutorialCompleted,
     );
+
     await DatabaseHelper.instance.updatePreferences(updatedPrefs);
     _userPrefs = updatedPrefs;
+
+    // CRITICAL FIX: Push new settings across the bridge to the overlay instantly
+    await OverlayService.syncPreferences(updatedPrefs);
   }
 
   Future<void> _updateSharedPrefs() async {
@@ -136,8 +144,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
               if (result != null) {
                 setState(() => sourceLanguage = result);
-                // LangSourceScreen already updates the DB, just refreshing UI
-                _loadSettings();
+                await _loadSettings();
+
+                // CRITICAL FIX: Sync overlay after returning from the language picker
+                if (_userPrefs != null) {
+                  await OverlayService.syncPreferences(_userPrefs!);
+                }
               }
             },
           ),
@@ -152,8 +164,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
               if (result != null) {
                 setState(() => targetLanguage = result);
-                // LangTargetScreen already updates the DB, just refreshing UI
-                _loadSettings();
+                await _loadSettings();
+
+                // CRITICAL FIX: Sync overlay after returning from the language picker
+                if (_userPrefs != null) {
+                  await OverlayService.syncPreferences(_userPrefs!);
+                }
               }
             },
           ),
@@ -202,7 +218,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 10),
 
-          // Font Size Slider with Value Display
+          // Font Size Slider
           Text(context.loc.fontSize),
           Row(
             children: [
@@ -214,7 +230,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onChanged: (value) {
                     setState(() => fontSize = value);
                   },
-                  onChangeEnd: (value) => _updateDbPrefs(),
+                  onChangeEnd: (value) => _updateDbPrefs(), // Triggers the overlay sync
                 ),
               ),
               const SizedBox(width: 10),
@@ -225,20 +241,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ],
           ),
 
-          // Opacity Slider with Value Display
+          // Opacity Slider
           Text(context.loc.backgroundOpacity),
           Row(
             children: [
               Expanded(
                 child: Slider(
                   value: opacity.toDouble(),
-                  min: 20, // Min opacity 20%
-                  max: 100, // Max opacity 100%
+                  min: 20,
+                  max: 100,
                   divisions: 16,
                   onChanged: (value) {
                     setState(() => opacity = value.toInt());
                   },
-                  onChangeEnd: (value) => _updateDbPrefs(),
+                  onChangeEnd: (value) => _updateDbPrefs(), // Triggers the overlay sync
                 ),
               ),
               const SizedBox(width: 10),
@@ -274,7 +290,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onChanged: (value) {
                 if (value != null) {
                   setState(() => textColorHex = value);
-                  _updateDbPrefs();
+                  _updateDbPrefs(); // Triggers the overlay sync
                 }
               },
             ),
@@ -305,7 +321,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onChanged: (value) {
                 if (value != null) {
                   setState(() => bgColorHex = value);
-                  _updateDbPrefs();
+                  _updateDbPrefs(); // Triggers the overlay sync
                 }
               },
             ),
@@ -335,7 +351,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 if (value != null) {
                   setState(() => appLanguage = value);
                   _updateSharedPrefs();
-
                   context.read<SettingsController>().setLanguage(value);
                 }
               },
@@ -350,7 +365,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onChanged: (value) {
               setState(() => darkMode = value);
               _updateSharedPrefs();
-
               context.read<SettingsController>().setDarkMode(value);
             },
           ),
