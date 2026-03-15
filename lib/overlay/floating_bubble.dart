@@ -23,7 +23,7 @@ class _FloatingBubbleState extends State<FloatingBubble> {
   bool expanded = false;
   bool isPlaying = true;
 
-  // FIX 3: Added a resize lock and queue to handle rapid text streaming
+  // FIX: Added a resize lock and queue to handle rapid text streaming
   bool _isResizing = false;
   bool _resizeQueued = false;
 
@@ -42,9 +42,10 @@ class _FloatingBubbleState extends State<FloatingBubble> {
   void didUpdateWidget(FloatingBubble oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // CRITICAL FIX: Trigger resize on ANY text change, not just empty/non-empty.
-    // This allows the window to constantly resize as text wraps to new lines.
-    if (oldWidget.text != widget.text) {
+    // CRITICAL FIX: Trigger resize on text change, but ONLY if not expanded.
+    // If expanded, the subtitles are hidden, so we don't need to resize.
+    // This also prevents the "resizing lock" from making the menu unresponsive during text streaming.
+    if (oldWidget.text != widget.text && !expanded) {
       _updateWindowSize();
     }
   }
@@ -54,9 +55,9 @@ class _FloatingBubbleState extends State<FloatingBubble> {
     if (expanded) return 280;
     if (widget.text.trim().isEmpty) return 100;
 
-    // Safely get logical width
+    // Safely get logical width using display size for consistent screen-relative measurements
     final view = context != null ? View.of(context) : ui.PlatformDispatcher.instance.views.first;
-    final logicalWidth = view.physicalSize.width / view.devicePixelRatio;
+    final logicalWidth = view.display.size.width / view.display.devicePixelRatio;
     final double safeMaxWidth = math.max(150.0, logicalWidth - 40);
 
     // Simulate drawing the text to get its exact height
@@ -117,6 +118,7 @@ class _FloatingBubbleState extends State<FloatingBubble> {
   }
 
   void _handleAction(String action) async {
+    debugPrint("Overlay action: $action");
     FlutterOverlayWindow.shareData({"action": action});
 
     switch (action) {
@@ -127,20 +129,19 @@ class _FloatingBubbleState extends State<FloatingBubble> {
       // wait for listener from main
         return;
       case 'toggle':
-      // FIX 5: Combined the setState calls so the widget only rebuilds once
         setState(() {
           isPlaying = !isPlaying;
           expanded = false;
         });
         if (mounted) _updateWindowSize();
-        return; // Exit early since we manually collapsed it here
+        return;
     }
 
     _collapseMenu();
   }
 
   void _toggleMenu() {
-    // Ignore taps if the window is currently resizing
+    // Allow toggling even if resizing is queued, but skip if currently in the middle of a resize call
     if (_isResizing) return;
 
     if (expanded) {
@@ -157,7 +158,6 @@ class _FloatingBubbleState extends State<FloatingBubble> {
 
   void _collapseMenu() {
     setState(() => expanded = false);
-    // Removed the animation delay so the state syncs instantly with the window resize
     if (mounted) {
       _updateWindowSize();
     }
@@ -168,17 +168,15 @@ class _FloatingBubbleState extends State<FloatingBubble> {
       return const Icon(Icons.close, color: Colors.white, size: 28, key: ValueKey('close_icon'));
     }
 
-    // Using the image asset when collapsed
     return Image.asset(
       'assets/icon/icon.png',
       width: 28,
       height: 28,
       key: const ValueKey('app_icon'),
-      errorBuilder: (context, error, stackTrace) => const Icon(Icons.mic, color: Colors.white, size: 28), // Fallback if image fails
+      errorBuilder: (context, error, stackTrace) => const Icon(Icons.mic, color: Colors.white, size: 28),
     );
   }
 
-  /// Helper to convert hex strings exactly the same way SettingsScreen does
   Color _hexToColor(String hexString) {
     try {
       final buffer = StringBuffer();
@@ -186,20 +184,16 @@ class _FloatingBubbleState extends State<FloatingBubble> {
       buffer.write(hexString.replaceFirst('#', ''));
       return Color(int.parse(buffer.toString(), radix: 16));
     } catch (e) {
-      return Colors.black; // Fallback
+      return Colors.black;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // FIX 1: Bypass the buggy MediaQuery and get the raw, instant hardware screen metrics
     final view = View.of(context);
     final logicalWidth = view.display.size.width / view.display.devicePixelRatio;
-
-    // Safely calculate max width
     final double safeMaxWidth = math.max(150.0, logicalWidth - 40);
 
-    // Determine the exact boundaries of the widget to match the Android window.
     final double currentWidth = expanded ? 280.0 : (widget.text.trim().isNotEmpty ? logicalWidth : 100.0);
 
     return Scaffold(
@@ -208,64 +202,68 @@ class _FloatingBubbleState extends State<FloatingBubble> {
         width: currentWidth,
         child: Align(
           alignment: Alignment.topCenter,
-          // REFACTOR: Changed Stack to Column. This physically prevents the bubble
-          // from jumping around the screen when the window resizes dynamically.
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // MAIN BUBBLE & RADIAL MENU
-              SizedBox(
-                width: expanded ? 280.0 : 100.0,
-                height: expanded ? 280.0 : 100.0,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  alignment: Alignment.center,
-                  children: [
-                    ..._buildRadialMenu(),
-                    GestureDetector(
-                      onTap: _toggleMenu,
-                      child: Container(
-                        width: bubbleRadius * 2,
-                        height: bubbleRadius * 2,
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.9),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white24, width: 2),
-                          boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 8)],
-                        ),
-                        child: Center(
-                          child: _getCenterWidget(),
+          // FIX: Wrap Column in SingleChildScrollView with NeverScrollableScrollPhysics.
+          // This suppresses "RenderFlex overflow" errors during the split-second
+          // when the widget has updated its size but the Android window hasn't resized yet.
+          child: SingleChildScrollView(
+            physics: const NeverScrollableScrollPhysics(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // MAIN BUBBLE & RADIAL MENU
+                SizedBox(
+                  width: expanded ? 280.0 : 100.0,
+                  height: expanded ? 280.0 : 100.0,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    alignment: Alignment.center,
+                    children: [
+                      ..._buildRadialMenu(),
+                      GestureDetector(
+                        onTap: _toggleMenu,
+                        child: Container(
+                          width: bubbleRadius * 2,
+                          height: bubbleRadius * 2,
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.9),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white24, width: 2),
+                            boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 8)],
+                          ),
+                          child: Center(
+                            child: _getCenterWidget(),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
 
-              // SUBTITLE DISPLAY (100% Identical to Settings Preview)
-              if (!expanded && widget.text.trim().isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 10, bottom: 15),
-                  child: IgnorePointer(
-                    child: Container(
-                      constraints: BoxConstraints(maxWidth: safeMaxWidth),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: _hexToColor(widget.prefs.bgColorHex).withOpacity(widget.prefs.overlayOpacity / 100.0),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        widget.text,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: _hexToColor(widget.prefs.textColorHex),
-                          fontSize: widget.prefs.fontSizeScale,
+                // SUBTITLE DISPLAY
+                if (!expanded && widget.text.trim().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10, bottom: 15),
+                    child: IgnorePointer(
+                      child: Container(
+                        constraints: BoxConstraints(maxWidth: safeMaxWidth),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: _hexToColor(widget.prefs.bgColorHex).withOpacity(widget.prefs.overlayOpacity / 100.0),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          widget.text,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: _hexToColor(widget.prefs.textColorHex),
+                            fontSize: widget.prefs.fontSizeScale,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -273,26 +271,20 @@ class _FloatingBubbleState extends State<FloatingBubble> {
   }
 
   List<Widget> _buildRadialMenu() {
-    // We now build the buttons even when collapsed so the implicit animations can shrink/fade them seamlessly.
-
-    // FIX 2: Replaced Map<String, dynamic> with Dart Records for total type safety
     final actions = <({IconData icon, String label})>[
       (icon: Icons.settings, label: 'settings'),
       (icon: isPlaying ? Icons.pause : Icons.play_arrow, label: 'toggle'),
       (icon: Icons.power_settings_new, label: 'close'),
     ];
 
-    // Adjusted for 3 buttons instead of 4 so they spread out properly
     final angles = [-math.pi / 2, -math.pi / 4, 0.0];
 
-    // FIX: Use actions.length to prevent the RangeError crash
     return List.generate(actions.length, (index) {
       double dx = menuRadius * math.cos(angles[index]);
       double dy = menuRadius * math.sin(angles[index]);
 
       return Transform.translate(
         offset: Offset(dx, dy),
-        // FIX 4: Added AnimatedScale and AnimatedOpacity for smooth pop-out UX
         child: AnimatedScale(
           scale: expanded ? 1.0 : 0.0,
           duration: const Duration(milliseconds: 150),
@@ -301,7 +293,6 @@ class _FloatingBubbleState extends State<FloatingBubble> {
             opacity: expanded ? 1.0 : 0.0,
             duration: const Duration(milliseconds: 150),
             child: IconButton.filled(
-              // Disable the button when collapsed to prevent ghost clicks
               onPressed: expanded ? () => _handleAction(actions[index].label) : null,
               icon: Icon(actions[index].icon, color: Colors.white),
               style: IconButton.styleFrom(

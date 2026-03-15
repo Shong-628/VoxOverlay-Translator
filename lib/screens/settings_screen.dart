@@ -6,8 +6,9 @@ import 'package:provider/provider.dart';
 import '../db/database_helper.dart';
 import '../models/user_preference.dart';
 import '../services/settings_controller.dart';
+import '../services/translation_service.dart'; // Added translation service import
 import '../extensions/context_extensions.dart';
-import '../overlay/overlay_service.dart'; // NEW: Added overlay service import
+import '../overlay/overlay_service.dart';
 
 import 'lang_source_screen.dart';
 import 'lang_target_screen.dart';
@@ -73,9 +74,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
 
     // Sync global settings controller
-    final controller = context.read<SettingsController>();
-    controller.darkMode = darkMode;
-    controller.appLanguage = appLanguage;
+    if (mounted) {
+      final controller = context.read<SettingsController>();
+      controller.darkMode = darkMode;
+      controller.appLanguage = appLanguage;
+    }
   }
 
   Future<void> _updateDbPrefs() async {
@@ -95,7 +98,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await DatabaseHelper.instance.updatePreferences(updatedPrefs);
     _userPrefs = updatedPrefs;
 
-    // CRITICAL FIX: Push new settings across the bridge to the overlay instantly
+    // FIX: Update the translation service engine immediately
+    if (mounted) {
+      await context.read<TranslationService>().reloadPreferences();
+    }
+
+    // Sync across the bridge to the overlay instantly
     await OverlayService.syncPreferences(updatedPrefs);
   }
 
@@ -106,10 +114,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Color _hexToColor(String hexString) {
-    final buffer = StringBuffer();
-    if (hexString.length == 6 || hexString.length == 7) buffer.write('ff');
-    buffer.write(hexString.replaceFirst('#', ''));
-    return Color(int.parse(buffer.toString(), radix: 16));
+    try {
+      final buffer = StringBuffer();
+      if (hexString.length == 6 || hexString.length == 7) buffer.write('ff');
+      buffer.write(hexString.replaceFirst('#', ''));
+      return Color(int.parse(buffer.toString(), radix: 16));
+    } catch (e) {
+      return Colors.black;
+    }
   }
 
   @override
@@ -144,12 +156,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
               if (result != null) {
                 setState(() => sourceLanguage = result);
-                await _loadSettings();
-
-                // CRITICAL FIX: Sync overlay after returning from the language picker
-                if (_userPrefs != null) {
-                  await OverlayService.syncPreferences(_userPrefs!);
-                }
+                await _updateDbPrefs(); // Use update instead of just load
               }
             },
           ),
@@ -164,12 +171,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               );
               if (result != null) {
                 setState(() => targetLanguage = result);
-                await _loadSettings();
-
-                // CRITICAL FIX: Sync overlay after returning from the language picker
-                if (_userPrefs != null) {
-                  await OverlayService.syncPreferences(_userPrefs!);
-                }
+                await _updateDbPrefs(); // Use update instead of just load
               }
             },
           ),
@@ -186,7 +188,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             width: double.infinity,
             decoration: BoxDecoration(
               image: const DecorationImage(
-                image: NetworkImage("https://picsum.photos/seed/picsum/400/200"), // Mock video background
+                image: NetworkImage("https://picsum.photos/seed/picsum/400/200"),
                 fit: BoxFit.cover,
               ),
               borderRadius: BorderRadius.circular(8),
@@ -230,7 +232,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onChanged: (value) {
                     setState(() => fontSize = value);
                   },
-                  onChangeEnd: (value) => _updateDbPrefs(), // Triggers the overlay sync
+                  onChangeEnd: (value) => _updateDbPrefs(),
                 ),
               ),
               const SizedBox(width: 10),
@@ -254,7 +256,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onChanged: (value) {
                     setState(() => opacity = value.toInt());
                   },
-                  onChangeEnd: (value) => _updateDbPrefs(), // Triggers the overlay sync
+                  onChangeEnd: (value) => _updateDbPrefs(),
                 ),
               ),
               const SizedBox(width: 10),
@@ -290,7 +292,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onChanged: (value) {
                 if (value != null) {
                   setState(() => textColorHex = value);
-                  _updateDbPrefs(); // Triggers the overlay sync
+                  _updateDbPrefs();
                 }
               },
             ),
@@ -321,7 +323,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onChanged: (value) {
                 if (value != null) {
                   setState(() => bgColorHex = value);
-                  _updateDbPrefs(); // Triggers the overlay sync
+                  _updateDbPrefs();
                 }
               },
             ),

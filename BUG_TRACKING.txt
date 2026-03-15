@@ -1,0 +1,11 @@
+ISSUE #1:
+overlay buttons doesn't work
+
+ISSUE #2:
+Renderflex overflow for subtitles
+
+ISSUE #3:
+transcription only works after pause in voice
+
+ISSUE #4:
+changing of translate to language doesn't update

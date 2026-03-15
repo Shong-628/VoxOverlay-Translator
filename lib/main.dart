@@ -42,8 +42,8 @@ class AppInitializer extends StatefulWidget {
 
 class _AppInitializerState extends State<AppInitializer> {
   final SettingsController _settingsController = SettingsController();
-  final AudioPipelineService _audioPipeline = AudioPipelineService();
   final TranslationService _translationService = TranslationService();
+  late final AudioPipelineService _audioPipeline;
 
   bool _initialized = false;
   bool _tutorialDone = false;
@@ -51,6 +51,8 @@ class _AppInitializerState extends State<AppInitializer> {
   @override
   void initState() {
     super.initState();
+    // Inject the shared TranslationService into the pipeline using the named parameter
+    _audioPipeline = AudioPipelineService(translationService: _translationService);
     _initialize();
   }
 
@@ -62,9 +64,6 @@ class _AppInitializerState extends State<AppInitializer> {
 
       _setupOverlayListener();
 
-      // Increased timeout to 3 minutes. Initial download of 3 ML Kit models
-      // can take a while on slower networks. Subsequent app launches will
-      // skip the download and pass this in milliseconds.
       await Future.wait([
         _audioPipeline.initialize(),
         _translationService.initialize(),
@@ -80,14 +79,9 @@ class _AppInitializerState extends State<AppInitializer> {
   }
 
   void _setupOverlayListener() {
-    // No need to make this async anymore since OverlayService handles the DB call
     FlutterOverlayWindow.overlayListener.listen((data) {
-
-      // 1. Pass the raw data to the service. If it's the "ready" ping,
-      // the service completes its internal lock and syncs the preferences safely.
       OverlayService.handleSystemMessage(data);
 
-      // 2. Handle the user tapping buttons on the overlay
       if (data is Map && data.containsKey('action')) {
         switch (data['action']) {
           case 'toggle':
@@ -96,17 +90,15 @@ class _AppInitializerState extends State<AppInitializer> {
 
           case 'settings':
             _audioPipeline.stopPipeline();
-            // Best practice: Bring the app to the foreground BEFORE pushing the route
-            // so the engine is fully attached and awake when the transition happens
             NativeWindowService.bringAppToForeground();
-            navigatorKey.currentState?.push(
-              MaterialPageRoute(builder: (_) => const SettingsScreen()),
-            );
+            Future.delayed(const Duration(milliseconds: 300), () {
+              navigatorKey.currentState?.push(
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
+            });
             break;
 
           case 'close':
-          // Perfect: The overlay UI closes itself natively, and this listener
-          // catches the message to cleanly shut down the heavy audio processing.
             _audioPipeline.stopPipeline();
             break;
         }
@@ -119,7 +111,7 @@ class _AppInitializerState extends State<AppInitializer> {
     if (!_initialized) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
-        theme: ThemeData.dark(useMaterial3: true), // Dark theme looks better for loading
+        theme: ThemeData.dark(useMaterial3: true),
         home: Scaffold(
           body: Center(
             child: Padding(
@@ -134,8 +126,6 @@ class _AppInitializerState extends State<AppInitializer> {
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
-                  // ListenableBuilder listens to the TranslationService
-                  // and updates this text dynamically as models download
                   ListenableBuilder(
                     listenable: _translationService,
                     builder: (context, child) {
