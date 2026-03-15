@@ -1,3 +1,6 @@
+// main.dart
+import 'dart:isolate';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'package:provider/provider.dart';
@@ -48,6 +51,9 @@ class _AppInitializerState extends State<AppInitializer> {
   bool _initialized = false;
   bool _tutorialDone = false;
 
+  // Native Dart port for bulletproof isolate communication
+  final ReceivePort _receivePort = ReceivePort();
+
   @override
   void initState() {
     super.initState();
@@ -61,7 +67,8 @@ class _AppInitializerState extends State<AppInitializer> {
       final prefs = await DatabaseHelper.instance.getPreferences();
       _tutorialDone = prefs.isTutorialCompleted;
 
-      _setupOverlayListener();
+      _setupIsolateCommunication();
+      _setupOverlayListener(); // Keep plugin listener as backup for system messages
 
       await Future.wait([
         _audioPipeline.initialize(),
@@ -77,41 +84,62 @@ class _AppInitializerState extends State<AppInitializer> {
     }
   }
 
-  void _setupOverlayListener() {
-    FlutterOverlayWindow.overlayListener.listen((data) {
-      OverlayService.handleSystemMessage(data);
+  void _setupIsolateCommunication() {
+    // Register the port using the ui alias
+    ui.IsolateNameServer.removePortNameMapping('vox_overlay_port');
+    ui.IsolateNameServer.registerPortWithName(_receivePort.sendPort, 'vox_overlay_port');
 
-      // Handle map-based actions from overlay
-      if (data is Map && data['type'] == 'ui_action') {
-        final action = data['action'];
-
-        switch (action) {
-          case 'toggle':
-            _audioPipeline.togglePipeline();
-            break;
-
-          case 'settings':
-            _audioPipeline.forcePause();
-            NativeWindowService.bringAppToForeground();
-
-            Future.delayed(const Duration(milliseconds: 500), () {
-              final context = navigatorKey.currentContext;
-              if (context != null && context.mounted) {
-                navigatorKey.currentState?.popUntil((route) => route.isFirst);
-                navigatorKey.currentState?.push(
-                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
-                );
-              }
-            });
-            break;
-
-          case 'close':
-            _audioPipeline.stopPipeline();
-            OverlayService.stopOverlay();
-            break;
-        }
+    _receivePort.listen((message) {
+      debugPrint("🟢 DIRECT ISOLATE MESSAGE RECEIVED: $message");
+      if (message is String && message.startsWith("ACTION_PREFIX:")) {
+        final action = message.replaceFirst("ACTION_PREFIX:", "");
+        _executeAction(action);
       }
     });
+  }
+
+  void _setupOverlayListener() {
+    // Keep this for OverlayService system messages, but buttons use the Isolate Port
+    FlutterOverlayWindow.overlayListener.listen((data) {
+      OverlayService.handleSystemMessage(data);
+    });
+  }
+
+  void _executeAction(String action) {
+    debugPrint("🟢 EXECUTING ACTION: $action");
+    switch (action) {
+      case 'toggle':
+        _audioPipeline.togglePipeline();
+        break;
+
+      case 'settings':
+        _audioPipeline.forcePause();
+        NativeWindowService.bringAppToForeground();
+
+        Future.delayed(const Duration(milliseconds: 500), () {
+          final context = navigatorKey.currentContext;
+          if (context != null && context.mounted) {
+            navigatorKey.currentState?.popUntil((route) => route.isFirst);
+            navigatorKey.currentState?.push(
+              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+            );
+          }
+        });
+        break;
+
+      case 'close':
+        _audioPipeline.stopPipeline();
+        OverlayService.stopOverlay();
+        break;
+    }
+  }
+
+  @override
+  void dispose() {
+    // Remove the port using the ui alias
+    ui.IsolateNameServer.removePortNameMapping('vox_overlay_port');
+    _receivePort.close();
+    super.dispose();
   }
 
   @override

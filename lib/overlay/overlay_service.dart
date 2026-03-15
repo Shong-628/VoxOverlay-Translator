@@ -1,3 +1,4 @@
+// overlay_service.dart
 import 'dart:async';
 import 'dart:developer' as dev;
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
@@ -7,11 +8,14 @@ import '../models/user_preference.dart';
 class OverlayService {
   static Completer<bool>? _overlayReadyCompleter;
 
+  // Use the exact same size as _kCollapsedSize in floating_bubble.dart
+  static const int _initialSize = 100;
+
   static void handleSystemMessage(dynamic data) {
     if (data is Map && data['status'] == 'ready') {
       if (_overlayReadyCompleter != null && !_overlayReadyCompleter!.isCompleted) {
         _overlayReadyCompleter!.complete(true);
-        dev.log("Overlay ping received: Ready!", name: 'OverlayService');
+        dev.log("🟢 Overlay ping received: Ready!", name: 'OverlayService');
       }
     }
   }
@@ -33,24 +37,33 @@ class OverlayService {
       }
 
       bool isActive = await FlutterOverlayWindow.isActive();
-      if (isActive) return;
+      if (isActive) {
+        dev.log("Overlay is already active.", name: 'OverlayService');
+        return;
+      }
 
+      // Reset completer for a fresh start
       _overlayReadyCompleter = Completer<bool>();
 
+      // FIX 1: Start exactly at the collapsed bubble size. 
+      // This prevents the WindowManager from drawing a massive invisible box 
+      // or clipping the view into a half-circle.
       await FlutterOverlayWindow.showOverlay(
-        height: 160,
-        width: WindowSize.matchParent,
+        height: _initialSize,
+        width: _initialSize,
         alignment: OverlayAlignment.center,
         flag: OverlayFlag.defaultFlag,
         enableDrag: true,
       );
 
+      // FIX 2: Wait for the engine to boot, but handle timeouts gracefully
       try {
-        await _overlayReadyCompleter!.future.timeout(const Duration(seconds: 5));
+        await _overlayReadyCompleter!.future.timeout(const Duration(seconds: 4));
       } catch (e) {
-        dev.log("Timeout waiting for overlay to be ready.", name: 'OverlayService');
+        dev.log("Timeout waiting for overlay ready ping. Proceeding anyway.", name: 'OverlayService');
       }
 
+      // Sync initial data only AFTER the window is attached
       final prefs = await DatabaseHelper.instance.getPreferences();
       await FlutterOverlayWindow.shareData(prefs.toMap());
 
@@ -62,7 +75,19 @@ class OverlayService {
   static Future<void> stopOverlay() async {
     try {
       if (!await FlutterOverlayWindow.isActive()) return;
+
       await FlutterOverlayWindow.closeOverlay();
+
+      // FIX 3: Add a tiny delay to let the OS fully destroy the background surface.
+      // This prevents "Zombie" isolates if the user immediately restarts the overlay.
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      // Clear the completer so the next boot is totally fresh
+      if (_overlayReadyCompleter != null && !_overlayReadyCompleter!.isCompleted) {
+        _overlayReadyCompleter!.completeError("Overlay closed before ready");
+      }
+      _overlayReadyCompleter = null;
+
     } catch (e) {
       dev.log("Error closing overlay", name: 'OverlayService', error: e);
     }
@@ -88,7 +113,6 @@ class OverlayService {
     }
   }
 
-  // NEW: Sync pipeline status to the overlay isolate
   static Future<void> syncPipelineStatus({required bool isRunning, required bool isPaused}) async {
     try {
       if (await FlutterOverlayWindow.isActive()) {

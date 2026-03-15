@@ -1,4 +1,5 @@
 // floating_bubble.dart
+import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -24,6 +25,7 @@ const double _kCollapsedSize = 100.0;
 const double _kExpandedSize = 280.0;
 const double _kBubbleRadius = 30.0;
 const double _kMenuRadius = 80.0;
+const String _kActionPrefix = "ACTION_PREFIX:";
 
 // --- Widget ---
 class FloatingBubble extends StatefulWidget {
@@ -46,23 +48,31 @@ class FloatingBubble extends StatefulWidget {
 
 class _FloatingBubbleState extends State<FloatingBubble> {
   bool _expanded = false;
-
-  // FIX: Queue system restored to ensure no line-wrap resizes are forgotten
   bool _isResizing = false;
   bool _resizeQueued = false;
   int _lastCalculatedHeight = 0;
 
+  late bool _isLocallyPlaying;
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _updateWindowSize();
+    _isLocallyPlaying = widget.isRunning && !widget.isPaused;
+
+    // FIX: Delay the initial resize by 150ms to ensure Android WindowManager
+    // has actually attached the surface. Fixes the "half circle" restart bug.
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (mounted) _updateWindowSize(force: true);
     });
   }
 
   @override
   void didUpdateWidget(FloatingBubble oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.isRunning != widget.isRunning || oldWidget.isPaused != widget.isPaused) {
+      _isLocallyPlaying = widget.isRunning && !widget.isPaused;
+    }
 
     if ((oldWidget.text != widget.text || oldWidget.isRunning != widget.isRunning) && !_expanded) {
       _updateWindowSize();
@@ -92,7 +102,8 @@ class _FloatingBubbleState extends State<FloatingBubble> {
     return totalHeight.ceil();
   }
 
-  Future<void> _updateWindowSize() async {
+  // Added 'force' parameter to bypass cache on boot
+  Future<void> _updateWindowSize({bool force = false}) async {
     if (!mounted) return;
 
     int targetHeight;
@@ -104,7 +115,7 @@ class _FloatingBubbleState extends State<FloatingBubble> {
       targetHeight = _kCollapsedSize.toInt();
     }
 
-    if (targetHeight == _lastCalculatedHeight && !_expanded) {
+    if (!force && targetHeight == _lastCalculatedHeight && !_expanded) {
       return;
     }
 
@@ -137,20 +148,22 @@ class _FloatingBubbleState extends State<FloatingBubble> {
     }
   }
 
-  void _handleAction(String action) async {
-    debugPrint("Overlay action: $action");
-    
-    // Send structured Map to main app
-    await FlutterOverlayWindow.shareData({
-      'type': 'ui_action',
-      'action': action,
-    });
+  void _handleAction(String action) {
+    debugPrint("Overlay action sent: $action");
+
+    final payload = "$_kActionPrefix$action";
+
+    // 1. Direct Memory Isolate Port (Bulletproof)
+    final SendPort? sendPort = ui.IsolateNameServer.lookupPortByName('vox_overlay_port');
+    sendPort?.send(payload);
+
+    // 2. Fallback channel just in case
+    FlutterOverlayWindow.shareData(payload);
 
     if (action == 'close' || action == 'settings') {
       _collapseMenu();
     } else if (action == 'toggle') {
-      // We don't manually toggle _isPlaying here anymore; we wait for the 
-      // status_update from the main app to ripple back through the props.
+      setState(() => _isLocallyPlaying = !_isLocallyPlaying);
       _collapseMenu();
     }
   }
@@ -162,12 +175,12 @@ class _FloatingBubbleState extends State<FloatingBubble> {
 
   void _expandMenu() {
     setState(() => _expanded = true);
-    _updateWindowSize();
+    _updateWindowSize(force: true); // Force layout bounds update
   }
 
   void _collapseMenu() {
     setState(() => _expanded = false);
-    if (mounted) _updateWindowSize();
+    if (mounted) _updateWindowSize(force: true);
   }
 
   @override
@@ -238,11 +251,9 @@ class _FloatingBubbleState extends State<FloatingBubble> {
   }
 
   List<Widget> _buildRadialMenu() {
-    final isPlaying = widget.isRunning && !widget.isPaused;
-    
     final actions = [
       (icon: Icons.settings, label: 'settings'),
-      (icon: isPlaying ? Icons.pause : Icons.play_arrow, label: 'toggle'),
+      (icon: _isLocallyPlaying ? Icons.pause : Icons.play_arrow, label: 'toggle'),
       (icon: Icons.power_settings_new, label: 'close'),
     ];
 
