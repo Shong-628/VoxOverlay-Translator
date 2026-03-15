@@ -14,16 +14,12 @@ class AudioPipelineService extends ChangeNotifier {
   final TranslationService _translationService; // Shared instance
   final AudioRecorder _recorder = AudioRecorder();
 
-  // Use named parameter to avoid positional mismatch and improve clarity
   AudioPipelineService({required TranslationService translationService})
       : _translationService = translationService;
 
   StreamSubscription<Uint8List>? _audioStreamSubscription;
 
-  // Buffer for incoming raw bytes
   final List<int> _byteBuffer = [];
-
-  // Context buffer for streaming decoder (holds past X seconds of floats)
   final List<double> _contextBuffer = [];
 
   bool _running = false;
@@ -33,18 +29,24 @@ class AudioPipelineService extends ChangeNotifier {
   bool _isPaused = false;
   bool get isPaused => _isPaused;
 
-  // Configuration for real-time streaming
   static const int _sampleRate = 16000;
   static const int _minChunkBytes = 8000; // Process every 0.25s
-  static const int _maxContextSamples = _sampleRate * 8; // Keep context to 8s
+  static const int _maxContextSamples = _sampleRate * 8; 
 
-  // Silence Detection (VAD)
   int _silenceChunks = 0;
   static const double _silenceThreshold = 0.008;
-  static const int _maxSilenceChunks = 2; // Reset context after ~0.5s of silence
+  static const int _maxSilenceChunks = 2; 
 
   Future<void> initialize() async {
     await _whisperService.initialize();
+  }
+
+  String _mapToWhisperLang(String prefLang) {
+    final l = prefLang.toLowerCase();
+    if (l == 'english' || l == 'en') return 'en';
+    if (l == 'malay' || l == 'ms') return 'ms';
+    if (l == 'chinese' || l == 'zh') return 'zh';
+    return 'auto'; 
   }
 
   Future<void> startPipeline() async {
@@ -59,6 +61,9 @@ class AudioPipelineService extends ChangeNotifier {
     _silenceChunks = 0;
 
     _translationService.resetCache();
+    
+    // Sync status to overlay
+    OverlayService.syncPipelineStatus(isRunning: true, isPaused: false);
     notifyListeners();
 
     final stream = await _recorder.startStream(
@@ -70,9 +75,7 @@ class AudioPipelineService extends ChangeNotifier {
     );
 
     _audioStreamSubscription = stream.listen((data) {
-      // Discard Audio if stream is paused
       if (_isPaused) return;
-
       _byteBuffer.addAll(data);
       if (_byteBuffer.length >= _minChunkBytes && !_isProcessing) {
         _processAudioChunk();
@@ -81,8 +84,7 @@ class AudioPipelineService extends ChangeNotifier {
   }
 
   Future<void> _processAudioChunk() async {
-    if (!_running || _byteBuffer.isEmpty) return;
-
+    if (!_running || _isPaused || _byteBuffer.isEmpty) return;
     _isProcessing = true;
 
     try {
@@ -102,14 +104,12 @@ class AudioPipelineService extends ChangeNotifier {
 
       double rms = math.sqrt(sumSquares / int16List.length);
 
-      // 1. Update VAD State
       if (rms < _silenceThreshold) {
         _silenceChunks++;
       } else {
         _silenceChunks = 0;
       }
 
-      // 2. Manage Context Window
       _contextBuffer.addAll(floatList);
       if (_contextBuffer.length > _maxContextSamples) {
         _contextBuffer.removeRange(0, _contextBuffer.length - _maxContextSamples);
@@ -117,29 +117,33 @@ class AudioPipelineService extends ChangeNotifier {
 
       bool isEndOfSentence = _silenceChunks >= _maxSilenceChunks;
 
-      // 3. Run Transcription
       if (_silenceChunks < _maxSilenceChunks || (isEndOfSentence && _contextBuffer.isNotEmpty)) {
-        final transcript = await _whisperService.transcribe(Float32List.fromList(_contextBuffer));
-        
+        String currentSourceLang = _translationService.sourcePref;
+        String whisperLang = _mapToWhisperLang(currentSourceLang);
+
+        final transcript = await _whisperService.transcribe(
+          Float32List.fromList(_contextBuffer),
+          language: whisperLang,
+        );
+
         if (_running && transcript.trim().isNotEmpty) {
           final cleanTranscript = transcript.replaceAll(RegExp(r'\[.*?\]|\(.*?\)'), '').trim();
-          
           if (cleanTranscript.isNotEmpty) {
-            final translated = await _translationService.translate(cleanTranscript);
-            if (_running && translated.isNotEmpty) {
-              OverlayService.showSubtitle(translated);
+            String displayText = cleanTranscript;
+            if (!_translationService.bypassTranslation) {
+              displayText = await _translationService.translate(cleanTranscript);
+            }
+            if (_running && displayText.isNotEmpty) {
+              OverlayService.showSubtitle(displayText);
             }
           }
         }
       }
 
-      // 4. Cleanup Context if silence detected
       if (isEndOfSentence && _contextBuffer.isNotEmpty) {
-        dev.log("Sentence break. Clearing context.", name: 'AudioPipeline');
         _contextBuffer.clear();
         _translationService.resetCache();
       }
-
     } catch (e) {
       dev.log("Pipeline error", name: 'AudioPipeline', error: e);
     } finally {
@@ -158,6 +162,9 @@ class AudioPipelineService extends ChangeNotifier {
     _contextBuffer.clear();
     _isProcessing = false;
     _translationService.resetCache();
+    
+    // Sync status to overlay
+    OverlayService.syncPipelineStatus(isRunning: false, isPaused: false);
     notifyListeners();
   }
 
@@ -170,6 +177,9 @@ class AudioPipelineService extends ChangeNotifier {
         _byteBuffer.clear();
         _contextBuffer.clear();
       }
+      
+      // Sync status to overlay
+      OverlayService.syncPipelineStatus(isRunning: _running, isPaused: _isPaused);
       notifyListeners();
     }
   }
@@ -177,6 +187,7 @@ class AudioPipelineService extends ChangeNotifier {
   void forcePause() {
     if (_running && !_isPaused) {
       _isPaused = true;
+      OverlayService.syncPipelineStatus(isRunning: _running, isPaused: _isPaused);
       notifyListeners();
     }
   }

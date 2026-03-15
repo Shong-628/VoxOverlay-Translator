@@ -6,7 +6,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
-import '../whisper_ffi.dart'; // Ensure this path points to your actual FFI binding
+import '../whisper_ffi.dart';
 
 /// A Singleton service managing the native Whisper C++ bindings.
 class WhisperService {
@@ -69,7 +69,8 @@ class WhisperService {
 
   /// Transcribes a raw Float32List containing 16kHz PCM audio data.
   /// Locks concurrently to prevent C++ segmentation faults.
-  Future<String> transcribe(Float32List audioFloats) async {
+  /// NEW: Added optional language parameter (defaults to auto-detect).
+  Future<String> transcribe(Float32List audioFloats, {String language = 'auto'}) async {
     if (!_initialized) await initialize();
 
     // Fail fast if empty or currently locked by another transcription request
@@ -79,7 +80,9 @@ class WhisperService {
     String result = "";
 
     try {
-      result = await _whisperFFI.transcribe(audioFloats);
+      // NEW: Pass the language down to the FFI layer.
+      // NOTE: Ensure your WhisperFFI wrapper actually accepts and uses this parameter!
+      result = await _whisperFFI.transcribe(audioFloats, language: language);
     } catch (e) {
       dev.log("Native transcription error", name: 'WhisperService', error: e);
     } finally {

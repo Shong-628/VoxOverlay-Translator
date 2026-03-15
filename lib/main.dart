@@ -51,7 +51,6 @@ class _AppInitializerState extends State<AppInitializer> {
   @override
   void initState() {
     super.initState();
-    // Inject the shared TranslationService into the pipeline using the named parameter
     _audioPipeline = AudioPipelineService(translationService: _translationService);
     _initialize();
   }
@@ -82,27 +81,31 @@ class _AppInitializerState extends State<AppInitializer> {
     FlutterOverlayWindow.overlayListener.listen((data) {
       OverlayService.handleSystemMessage(data);
 
-      if (data is Map && data.containsKey('action')) {
-        switch (data['action']) {
+      // Handle map-based actions from overlay
+      if (data is Map && data['type'] == 'ui_action') {
+        final action = data['action'];
+
+        switch (action) {
           case 'toggle':
             _audioPipeline.togglePipeline();
             break;
 
           case 'settings':
-            _audioPipeline.forcePause(); // Soft pause, don't stop!
+            _audioPipeline.forcePause();
             NativeWindowService.bringAppToForeground();
 
             Future.delayed(const Duration(milliseconds: 500), () {
-              // Safely push using currentState (bypasses context mounting issues)
-              navigatorKey.currentState?.popUntil((route) => route.isFirst);
-              navigatorKey.currentState?.push(
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
-              );
+              final context = navigatorKey.currentContext;
+              if (context != null && context.mounted) {
+                navigatorKey.currentState?.popUntil((route) => route.isFirst);
+                navigatorKey.currentState?.push(
+                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                );
+              }
             });
             break;
 
           case 'close':
-          // Main app now securely shuts down both systems.
             _audioPipeline.stopPipeline();
             OverlayService.stopOverlay();
             break;

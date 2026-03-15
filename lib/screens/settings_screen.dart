@@ -50,22 +50,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _loadSettings();
   }
 
-  Future<void> _loadSettings() async {
-    // Load Database Preferences
-    final prefs = await DatabaseHelper.instance.getPreferences();
+  // Add this helper method to normalize legacy DB values
+  String _normalizeLanguage(String lang) {
+    final l = lang.toLowerCase();
+    if (l == 'en' || l == 'english') return 'English';
+    if (l == 'ms' || l == 'malay') return 'Malay';
+    if (l == 'zh' || l == 'chinese') return 'Chinese';
+    if (l == 'none' || l.isEmpty) return 'None';
+    return lang[0].toUpperCase() + lang.substring(1); // Default capitalization
+  }
 
-    // Load Shared Preferences
+  Future<void> _loadSettings() async {
+    final prefs = await DatabaseHelper.instance.getPreferences();
     final SharedPreferences sharedPrefs = await SharedPreferences.getInstance();
 
     setState(() {
       _userPrefs = prefs;
-      sourceLanguage = prefs.sourceLanguageCode;
-      targetLanguage = prefs.targetLanguageCode;
+      // FIX: Sanitize the legacy "en", "ms", "zh" values
+      sourceLanguage = _normalizeLanguage(prefs.sourceLanguageCode);
+      targetLanguage = _normalizeLanguage(prefs.targetLanguageCode);
 
-      // Clamped values to prevent Slider assertion errors
       fontSize = prefs.fontSizeScale.clamp(12.0, 30.0);
       opacity = prefs.overlayOpacity.clamp(20, 100);
-
       textColorHex = prefs.textColorHex;
       bgColorHex = prefs.bgColorHex;
 
@@ -73,7 +79,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appLanguage = sharedPrefs.getString('appLanguage') ?? "English";
     });
 
-    // Sync global settings controller
+    // Proactively update the database if we caught a legacy value
+    if (sourceLanguage != prefs.sourceLanguageCode ||
+        targetLanguage != prefs.targetLanguageCode) {
+      _updateDbPrefs();
+    }
+
     if (mounted) {
       final controller = context.read<SettingsController>();
       controller.darkMode = darkMode;

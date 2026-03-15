@@ -269,7 +269,7 @@ class HomeScreen extends StatelessWidget {
 
 class _StatusCard extends StatelessWidget {
   final bool isRunning;
-  final bool isPaused; // <-- Added isPaused
+  final bool isPaused;
 
   const _StatusCard({required this.isRunning, required this.isPaused});
 
@@ -339,7 +339,7 @@ class _StatusCard extends StatelessWidget {
 
 class _StartStopButton extends StatelessWidget {
   final bool isRunning;
-  final bool isPaused; // <-- Added isPaused
+  final bool isPaused;
   final VoidCallback onPressed;
 
   const _StartStopButton({

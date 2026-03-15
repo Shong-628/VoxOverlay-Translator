@@ -15,8 +15,16 @@ class TranslationService extends ChangeNotifier {
   String _sourcePref = "";
   String _targetPref = "";
 
+  String get sourcePref => _sourcePref;
+  String get targetPref => _targetPref;
+
   bool _isInitialized = false;
   bool get isInitialized => _isInitialized;
+
+  // NEW: Expose the bypass logic so other services can skip calling translate entirely
+  bool get bypassTranslation =>
+      _targetPref.toLowerCase() == 'none' ||
+          _sourcePref.toLowerCase() == _targetPref.toLowerCase();
 
   String _setupStatus = "Initializing translation engine...";
   String get setupStatus => _setupStatus;
@@ -49,10 +57,13 @@ class TranslationService extends ChangeNotifier {
 
   TranslateLanguage _mapLanguage(String name) {
     switch (name.toLowerCase()) {
+      case 'en':
       case 'english':
         return TranslateLanguage.english;
+      case 'ms':
       case 'malay':
         return TranslateLanguage.malay;
+      case 'zh':
       case 'chinese':
         return TranslateLanguage.chinese;
       default:
@@ -107,8 +118,8 @@ class TranslationService extends ChangeNotifier {
     text = text.trim();
     if (text.isEmpty || !_isInitialized) return text;
 
-    if (_targetPref.toLowerCase() == 'none' ||
-        _sourcePref.toLowerCase() == _targetPref.toLowerCase()) {
+    // Use the new getter to handle the early return
+    if (bypassTranslation) {
       return text;
     }
 

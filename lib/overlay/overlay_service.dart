@@ -45,8 +45,6 @@ class OverlayService {
         enableDrag: true,
       );
 
-      // Wait for the OverlayApp to initialize and send the 'ready'
-      // ping before blasting the preferences over the channel.
       try {
         await _overlayReadyCompleter!.future.timeout(const Duration(seconds: 5));
       } catch (e) {
@@ -72,12 +70,8 @@ class OverlayService {
 
   static Future<void> showSubtitle(String text) async {
     if (text.trim().isEmpty) return;
-
     try {
-      if (!await FlutterOverlayWindow.isActive()) {
-        await startOverlay();
-      }
-
+      if (!await FlutterOverlayWindow.isActive()) return;
       await FlutterOverlayWindow.shareData(text);
     } catch (e) {
       dev.log("Error updating subtitle", name: 'OverlayService', error: e);
@@ -88,10 +82,24 @@ class OverlayService {
     try {
       if (await FlutterOverlayWindow.isActive()) {
         await FlutterOverlayWindow.shareData(prefs.toMap());
-        dev.log("Preferences synced to overlay.", name: 'OverlayService');
       }
     } catch (e) {
       dev.log("Error syncing prefs", name: 'OverlayService', error: e);
+    }
+  }
+
+  // NEW: Sync pipeline status to the overlay isolate
+  static Future<void> syncPipelineStatus({required bool isRunning, required bool isPaused}) async {
+    try {
+      if (await FlutterOverlayWindow.isActive()) {
+        await FlutterOverlayWindow.shareData({
+          'type': 'status_update',
+          'isRunning': isRunning,
+          'isPaused': isPaused,
+        });
+      }
+    } catch (e) {
+      dev.log("Error syncing status", name: 'OverlayService', error: e);
     }
   }
 }

@@ -13,6 +13,10 @@ class OverlayApp extends StatefulWidget {
 class _OverlayAppState extends State<OverlayApp> {
   String subtitle = "";
   UserPreference? _currentPrefs;
+  
+  // Track pipeline state in the overlay isolate
+  bool _isRunning = false;
+  bool _isPaused = false;
 
   @override
   void initState() {
@@ -22,37 +26,30 @@ class _OverlayAppState extends State<OverlayApp> {
       if (data == null) return;
 
       if (data is Map) {
-        _handleMapData(data);
+        final type = data['type'];
+        
+        if (type == 'status_update') {
+          // Sync pipeline status from main app
+          setState(() {
+            _isRunning = data['isRunning'] ?? false;
+            _isPaused = data['isPaused'] ?? false;
+          });
+        } else if (data.containsKey('target_language_code')) {
+          // Sync preferences
+          setState(() {
+            _currentPrefs = UserPreference.fromMap(Map<String, dynamic>.from(data));
+          });
+        }
       }
       else if (data is String) {
-        // This prevents throwing/catching FormatExceptions on every single plain-text subtitle.
-        if (data.trimLeft().startsWith('{')) {
-          try {
-            final decoded = jsonDecode(data);
-            if (decoded is Map) {
-              _handleMapData(decoded);
-              return;
-            }
-          } catch (_) {
-            // If it looked like JSON but failed to parse, fall back to subtitle
-          }
+        // Only update subtitle if it's not a legacy command string
+        if (!data.startsWith("ACTION_PREFIX:")) {
+          setState(() => subtitle = data);
         }
-
-        // If it's a regular string, update the subtitle
-        setState(() => subtitle = data);
       }
     });
 
-    // Ping the main app that we are attached and ready to receive preferences
     FlutterOverlayWindow.shareData({"status": "ready"});
-  }
-
-  void _handleMapData(Map dynamicData) {
-    if (dynamicData.containsKey('target_language_code')) {
-      setState(() {
-        _currentPrefs = UserPreference.fromMap(Map<String, dynamic>.from(dynamicData));
-      });
-    }
   }
 
   @override
@@ -64,6 +61,8 @@ class _OverlayAppState extends State<OverlayApp> {
     return FloatingBubble(
       text: subtitle,
       prefs: _currentPrefs!,
+      isRunning: _isRunning,
+      isPaused: _isPaused,
     );
   }
 }
