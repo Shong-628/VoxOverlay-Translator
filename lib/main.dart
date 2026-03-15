@@ -91,10 +91,18 @@ class _AppInitializerState extends State<AppInitializer> {
           case 'settings':
             _audioPipeline.stopPipeline();
             NativeWindowService.bringAppToForeground();
+
             Future.delayed(const Duration(milliseconds: 300), () {
-              navigatorKey.currentState?.push(
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
-              );
+              final context = navigatorKey.currentContext;
+              if (context != null && context.mounted) {
+                // Pop any existing dialogs/screens back to the Home Screen first
+                navigatorKey.currentState?.popUntil((route) => route.isFirst);
+
+                // Then push the Settings Screen so it doesn't stack infinitely
+                navigatorKey.currentState?.push(
+                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                );
+              }
             });
             break;
 

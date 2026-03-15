@@ -126,7 +126,7 @@ class _FloatingBubbleState extends State<FloatingBubble> {
         FlutterOverlayWindow.closeOverlay();
         return;
       case 'settings':
-      // wait for listener from main
+        _collapseMenu();
         return;
       case 'toggle':
         setState(() {
@@ -228,7 +228,6 @@ class _FloatingBubbleState extends State<FloatingBubble> {
                             color: Colors.black.withOpacity(0.9),
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white24, width: 2),
-                            boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 8)],
                           ),
                           child: Center(
                             child: _getCenterWidget(),
