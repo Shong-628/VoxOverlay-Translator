@@ -21,6 +21,10 @@
             android:name="io.flutter.app.android.EnableImpeller"
             android:value="false" />
 
+        <meta-data
+            android:name="io.flutter.app.android.WideColorGamut"
+            android:value="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

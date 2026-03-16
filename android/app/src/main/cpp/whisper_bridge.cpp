@@ -33,6 +33,13 @@ const char* bridge_whisper_transcribe(struct whisper_context* ctx, float* pcmf32
     // This ensures we get the raw Malay/Chinese text to feed into ML Kit later.
     wparams.translate = false;
 
+    // Add these inside bridge_whisper_transcribe
+    wparams.no_timestamps = true;
+
+    // If your whisper.cpp version is recent enough, this stops it from
+    // trying to force text out of ambient noise
+    wparams.suppress_blank = true;
+
     wparams.n_threads = std::min(4, (int)std::thread::hardware_concurrency());
 
     if (whisper_full(ctx, wparams, pcmf32, n_samples) != 0) {

@@ -148,7 +148,8 @@ class _WhisperTestWidgetState extends State<WhisperTestWidget> {
 
       // 4. If silent for too long, flush context to save processing power
       if (_isSilent) {
-        _handleSilence();
+        // FIX: Added 'await' here so it completes the final transcription before returning
+        await _handleSilence();
         return;
       }
 
@@ -185,12 +186,14 @@ class _WhisperTestWidgetState extends State<WhisperTestWidget> {
   }
 
   List<double> _convertPcm16ToFloat32(Uint8List chunkBytes) {
-    final int16List = chunkBytes.buffer.asInt16List();
-    final floatList = List<double>.filled(int16List.length, 0.0);
+    // FIX: Using ByteData avoids memory alignment exceptions and endianness distortion
+    final floatList = <double>[];
+    final byteData = ByteData.sublistView(chunkBytes);
 
     // Normalize 16-bit PCM (-32768 to 32767) to Float32 (-1.0 to 1.0)
-    for (int i = 0; i < int16List.length; i++) {
-      floatList[i] = int16List[i] / 32768.0;
+    for (int i = 0; i < chunkBytes.length; i += 2) {
+      final int16Sample = byteData.getInt16(i, Endian.little);
+      floatList.add(int16Sample / 32768.0);
     }
     return floatList;
   }
@@ -214,10 +217,16 @@ class _WhisperTestWidgetState extends State<WhisperTestWidget> {
     });
   }
 
-  void _handleSilence() {
+  Future<void> _handleSilence() async {
     if (_contextBuffer.isNotEmpty) {
+      // 1. Do one final transcription of the complete sentence
+      final finalTranscript = await _whisperService.transcribe(Float32List.fromList(_contextBuffer));
+      final cleanTranscript = finalTranscript.replaceAll(RegExp(r'\[.*?\]|\(.*?\)'), '').trim();
+      _updateTranscriptUI(cleanTranscript);
+
+      // 2. Now clear the buffer
       _contextBuffer.clear();
-      _isNewSentence = true; // Prepare a new line for the next time speech occurs
+      _isNewSentence = true;
     }
     _isProcessing = false;
   }
@@ -275,6 +284,7 @@ class _WhisperTestWidgetState extends State<WhisperTestWidget> {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0), // Added slight padding
       child: Column(
         children: [
           _buildHeader(),
@@ -297,9 +307,13 @@ class _WhisperTestWidgetState extends State<WhisperTestWidget> {
       children: const [
         Icon(Icons.monitor_heart, size: 24, color: Colors.deepPurple),
         SizedBox(width: 8),
-        Text(
-          "Whisper Diagnostic Test",
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        // FIX: Wrapped in Flexible to prevent text overflow on small screens
+        Flexible(
+          child: Text(
+            "Whisper Diagnostic Test",
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          ),
         ),
       ],
     );
@@ -318,22 +332,36 @@ class _WhisperTestWidgetState extends State<WhisperTestWidget> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("RMS Vol: ${_currentRms.toStringAsFixed(4)}",
-                  style: TextStyle(
-                      color: _currentRms < _silenceThreshold ? Colors.grey : Colors.green,
-                      fontWeight: FontWeight.bold)),
-              Text("VAD: ${_isSilent ? 'SILENCE' : 'VOICE'}",
-                  style: TextStyle(
-                      color: _isSilent ? Colors.grey : Colors.blue,
-                      fontWeight: FontWeight.bold)),
+              // FIX: Wrapped in Expanded
+              Expanded(
+                child: Text("RMS Vol: ${_currentRms.toStringAsFixed(4)}",
+                    style: TextStyle(
+                        color: _currentRms < _silenceThreshold ? Colors.grey : Colors.green,
+                        fontWeight: FontWeight.bold)),
+              ),
+              // FIX: Wrapped in Expanded
+              Expanded(
+                child: Text("VAD: ${_isSilent ? 'SILENCE' : 'VOICE'}",
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                        color: _isSilent ? Colors.grey : Colors.blue,
+                        fontWeight: FontWeight.bold)),
+              ),
             ],
           ),
           const Divider(),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("Byte Buffer: ${_byteBuffer.length}"),
-              Text("Context Window: ${(_contextBuffer.length / _sampleRate).toStringAsFixed(1)}s"),
+              // FIX: Wrapped in Expanded
+              Expanded(child: Text("Byte Buffer: ${_byteBuffer.length}")),
+              // FIX: Wrapped in Expanded
+              Expanded(
+                child: Text(
+                  "Context Window: ${(_contextBuffer.length / _sampleRate).toStringAsFixed(1)}s",
+                  textAlign: TextAlign.right,
+                ),
+              ),
             ],
           ),
         ],
@@ -356,6 +384,7 @@ class _WhisperTestWidgetState extends State<WhisperTestWidget> {
         child: Text(
           _isRecording ? "Speak into the microphone..." : "Waiting to start...",
           style: const TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+          textAlign: TextAlign.center,
         ),
       )
           : ListView.separated(
@@ -388,11 +417,15 @@ class _WhisperTestWidgetState extends State<WhisperTestWidget> {
           ),
           const SizedBox(width: 8),
         ],
-        Text(
-          _statusMessage,
-          style: TextStyle(
-            color: _isRecording ? Colors.red : Colors.grey[700],
-            fontWeight: FontWeight.bold,
+        // FIX: Wrapped in Flexible to prevent long error messages from breaking layout
+        Flexible(
+          child: Text(
+            _statusMessage,
+            style: TextStyle(
+              color: _isRecording ? Colors.red : Colors.grey[700],
+              fontWeight: FontWeight.bold,
+            ),
+            textAlign: TextAlign.center,
           ),
         ),
       ],

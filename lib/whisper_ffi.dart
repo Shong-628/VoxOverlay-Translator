@@ -48,9 +48,13 @@ class WhisperFFI {
   Future<String> transcribe(Float32List audioData, {String language = 'auto'}) async {
     if (_context == null || _context!.address == 0) return "";
 
+    // 1. Grab the raw memory address of the C++ context.
+    // Integers can be safely passed across isolates!
     final int contextAddress = _context!.address;
 
+    // 2. Offload the heavy execution to a background isolate
     return await Isolate.run(() {
+      // Re-open the library inside the new isolate
       final lib = Platform.isAndroid
           ? DynamicLibrary.open('libwhisper_native.so')
           : DynamicLibrary.process();
@@ -58,16 +62,17 @@ class WhisperFFI {
       final transcribeFunc = lib.lookupFunction<BridgeWhisperTranscribeC, BridgeWhisperTranscribeDart>('bridge_whisper_transcribe');
       final freeStringFunc = lib.lookupFunction<BridgeWhisperFreeStringC, BridgeWhisperFreeStringDart>('bridge_whisper_free_string');
 
+      // Reconstruct the C++ context pointer from the memory address
       final isolateContext = Pointer<Void>.fromAddress(contextAddress);
 
-      // 1. Allocate native memory for audio and language string
+      // Allocate native memory
       final Pointer<Float> audioPtr = malloc.allocate<Float>(audioData.length * sizeOf<Float>());
-      final Pointer<Utf8> langPtr = language.toNativeUtf8(); // NEW: Convert Dart string to C string
+      final Pointer<Utf8> langPtr = language.toNativeUtf8();
 
-      // 2. Map native memory to Dart and copy
       audioPtr.asTypedList(audioData.length).setAll(0, audioData);
 
-      // 3. Run inference (NEW: Pass langPtr)
+      // 3. Run inference. THIS is the blocking call.
+      // Because we are in Isolate.run(), it blocks this background thread, NOT the UI!
       final Pointer<Utf8> resultPtr = transcribeFunc(isolateContext, audioPtr, audioData.length, langPtr);
 
       String text = "";
@@ -76,9 +81,9 @@ class WhisperFFI {
         freeStringFunc(resultPtr);
       }
 
-      // 4. Clean up memory
+      // Clean up memory
       malloc.free(audioPtr);
-      malloc.free(langPtr); // NEW: Free language string memory
+      malloc.free(langPtr);
 
       return text.trim();
     });

@@ -9,65 +9,97 @@ import 'onboarding_screen.dart';
 
 import '../widgets/mic_input_visualizer.dart';
 import '../widgets/test_translate.dart';
- import '../widgets/test_whisper.dart';
+import '../widgets/test_whisper.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
-  Future<void> _handleTogglePipeline(BuildContext context, AudioPipelineService service) async {
-    if (!service.isRunning) {
-      // 1. Check Overlay Permission
-      bool hasOverlayPermission = await OverlayService.hasPermission();
-      if (!hasOverlayPermission) {
-        await OverlayService.requestPermission();
-        hasOverlayPermission = await OverlayService.hasPermission();
-      }
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
 
-      if (!hasOverlayPermission) {
-        if (!context.mounted) return; // Safety check after await
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Overlay permission is required")),
-        );
-        return;
-      }
+class _HomeScreenState extends State<HomeScreen> {
+  // LOCK STATE: Prevents spam clicking
+  bool _isToggling = false;
 
-      // 2. Check Microphone Permission safely
-      var micStatus = await Permission.microphone.status;
+  Future<void> _handleTogglePipeline(AudioPipelineService service) async {
+    // 1. If we are already processing a click, ignore any new clicks entirely.
+    if (_isToggling) return;
 
-      if (micStatus.isPermanentlyDenied) {
-        if (!context.mounted) return;
-        _showSettingsDialog(context, "Microphone access is permanently denied. Please enable it in system settings.");
-        return;
-      }
+    // 2. Lock the UI
+    setState(() {
+      _isToggling = true;
+    });
 
-      if (!micStatus.isGranted) {
-        micStatus = await Permission.microphone.request();
-      }
-
-      if (micStatus.isGranted) {
-        service.startPipeline();
-        await OverlayService.startOverlay();
-      } else {
-        if (!context.mounted) return; // Safety check after await
-
-        // Catch the scenario where they just denied it during the request
-        if (micStatus.isPermanentlyDenied) {
-          _showSettingsDialog(context, "Microphone access is permanently denied. Please enable it in system settings.");
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Microphone permission is required for transcription")),
-          );
+    try {
+      if (!service.isRunning) {
+        // 1. Check Overlay Permission
+        bool hasOverlayPermission = await OverlayService.hasPermission();
+        if (!hasOverlayPermission) {
+          await OverlayService.requestPermission();
+          hasOverlayPermission = await OverlayService.hasPermission();
         }
+
+        if (!hasOverlayPermission) {
+          if (!mounted) return; // Safety check after await
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Overlay permission is required")),
+          );
+          return;
+        }
+
+        // 2. Check Microphone Permission safely
+        var micStatus = await Permission.microphone.status;
+
+        if (micStatus.isPermanentlyDenied) {
+          if (!mounted) return;
+          _showSettingsDialog("Microphone access is permanently denied. Please enable it in system settings.");
+          return;
+        }
+
+        if (!micStatus.isGranted) {
+          micStatus = await Permission.microphone.request();
+        }
+
+        if (micStatus.isGranted) {
+          await service.startPipeline();
+          await OverlayService.startOverlay();
+        } else {
+          if (!mounted) return; // Safety check after await
+
+          // Catch the scenario where they just denied it during the request
+          if (micStatus.isPermanentlyDenied) {
+            _showSettingsDialog("Microphone access is permanently denied. Please enable it in system settings.");
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Microphone permission is required for transcription")),
+            );
+          }
+        }
+      } else {
+        // Stopping
+        await service.stopPipeline();
+        await OverlayService.stopOverlay();
       }
-    } else {
-      // Stopping
-      service.stopPipeline();
-      await OverlayService.stopOverlay();
+    } catch (e) {
+      debugPrint("Error toggling pipeline: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("An error occurred: $e")),
+        );
+      }
+    } finally {
+      // 3. Always unlock the UI when done, whether it succeeded or failed
+      if (mounted) {
+        setState(() {
+          _isToggling = false;
+        });
+      }
     }
   }
 
   // Helper method to direct users to app settings
-  void _showSettingsDialog(BuildContext context, String message) {
+  void _showSettingsDialog(String message) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -179,7 +211,8 @@ class HomeScreen extends StatelessWidget {
               _StartStopButton(
                 isRunning: pipeline.isRunning,
                 isPaused: pipeline.isPaused, // <-- Add this
-                onPressed: () => _handleTogglePipeline(context, pipeline),
+                isLoading: _isToggling, // Pass the lock state
+                onPressed: () => _handleTogglePipeline(pipeline),
               ),
 
               const SizedBox(height: 40),
@@ -208,8 +241,8 @@ class HomeScreen extends StatelessWidget {
                     color: colorScheme.outlineVariant,
                   ),
                 ),
-                child: Column(
-                  children: const [
+                child: const Column(
+                  children: [
                     MicInputVisualizer(),
                     SizedBox(height: 10),
                   ],
@@ -340,11 +373,13 @@ class _StatusCard extends StatelessWidget {
 class _StartStopButton extends StatelessWidget {
   final bool isRunning;
   final bool isPaused;
+  final bool isLoading; // <-- Add this
   final VoidCallback onPressed;
 
   const _StartStopButton({
     required this.isRunning,
     required this.isPaused,
+    required this.isLoading, // <-- Add this
     required this.onPressed
   });
 
@@ -361,8 +396,15 @@ class _StartStopButton extends StatelessWidget {
         ? colorScheme.onPrimaryContainer
         : (isPaused ? Colors.orange.shade900 : colorScheme.onErrorContainer);
 
+    // Give visual feedback when disabled
+    if (isLoading) {
+      buttonColor = buttonColor.withAlpha(128);
+      iconColor = iconColor.withAlpha(128);
+    }
+
     return GestureDetector(
-      onTap: onPressed,
+      // Disable tap if it's currently loading
+      onTap: isLoading ? null : onPressed,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         width: 180,
@@ -381,19 +423,30 @@ class _StartStopButton extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              !isRunning ? Icons.play_arrow_rounded : Icons.stop_rounded,
-              size: 80,
-              color: iconColor,
-            ),
-            Text(
-              !isRunning ? "START" : "STOP",
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+            if (isLoading)
+              SizedBox(
+                width: 60,
+                height: 60,
+                child: CircularProgressIndicator(
+                  color: iconColor,
+                  strokeWidth: 4,
+                ),
+              )
+            else ...[
+              Icon(
+                !isRunning ? Icons.play_arrow_rounded : Icons.stop_rounded,
+                size: 80,
                 color: iconColor,
               ),
-            ),
+              Text(
+                !isRunning ? "START" : "STOP",
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: iconColor,
+                ),
+              ),
+            ]
           ],
         ),
       ),

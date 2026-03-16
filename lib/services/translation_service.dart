@@ -1,4 +1,4 @@
-// lib/translation_service.dart
+// lib/services/translation_service.dart
 import 'dart:async';
 import 'dart:developer' as dev;
 import 'package:flutter/foundation.dart';
@@ -8,8 +8,6 @@ import '../db/database_helper.dart';
 class TranslationService extends ChangeNotifier {
   final OnDeviceTranslatorModelManager _modelManager = OnDeviceTranslatorModelManager();
   final Map<String, OnDeviceTranslator> _translatorCache = {};
-
-  // NEW: Keep track of confirmed downloaded models to prevent network calls
   final Set<String> _downloadedModels = {};
 
   String _sourcePref = "";
@@ -21,16 +19,20 @@ class TranslationService extends ChangeNotifier {
   bool _isInitialized = false;
   bool get isInitialized => _isInitialized;
 
-  // NEW: Expose the bypass logic so other services can skip calling translate entirely
-  bool get bypassTranslation =>
-      _targetPref.toLowerCase() == 'none' ||
-          _sourcePref.toLowerCase() == _targetPref.toLowerCase();
+  // FIX 1: Map the strings to their ML Kit Enums BEFORE checking if they match.
+  // This ensures 'ms' and 'malay' are correctly recognized as the same language.
+  bool get bypassTranslation {
+    if (_targetPref.toLowerCase() == 'none') return true;
+
+    final sourceLang = _mapLanguage(_sourcePref);
+    final targetLang = _mapLanguage(_targetPref);
+
+    return sourceLang == targetLang;
+  }
 
   String _setupStatus = "Initializing translation engine...";
   String get setupStatus => _setupStatus;
 
-  Timer? _debounceTimer;
-  Completer<String>? _activeCompleter;
   String _lastInput = "";
   String _lastOutput = "";
 
@@ -81,15 +83,10 @@ class TranslationService extends ChangeNotifier {
           _setupStatus = "Downloading offline model: ${lang.name}\n(This only happens once)";
           notifyListeners();
 
-          // Attempt to download. This returns a boolean in newer ML Kit versions,
-          // or just completes silently if successful.
           await _modelManager.downloadModel(lang.bcpCode);
-
-          // Verify again just to be safe
           downloaded = await _modelManager.isModelDownloaded(lang.bcpCode);
         }
 
-        // If definitively downloaded, add it to our safe list
         if (downloaded) {
           _downloadedModels.add(lang.bcpCode);
           dev.log("${lang.name} is ready for offline use.", name: "TranslationService");
@@ -118,74 +115,55 @@ class TranslationService extends ChangeNotifier {
     text = text.trim();
     if (text.isEmpty || !_isInitialized) return text;
 
-    // Use the new getter to handle the early return
-    if (bypassTranslation) {
-      return text;
-    }
+    if (bypassTranslation) return text;
 
-    if (text == _lastInput) {
-      return _lastOutput;
-    }
+    // Fast-path cache return
+    if (text == _lastInput) return _lastOutput;
 
     final sourceLang = _mapLanguage(_sourcePref);
     final targetLang = _mapLanguage(_targetPref);
 
-    // NEW STRICT OFFLINE CHECK: If models aren't locally verified, bypass ML Kit entirely
+    // FIX 2: Absolute safety net. Under no circumstances should we allow ML Kit
+    // to process identical source and target enums, as it causes native thread hangs.
+    if (sourceLang == targetLang) {
+      return text;
+    }
+
+    // Strict offline verification
     if (!_downloadedModels.contains(sourceLang.bcpCode) ||
         !_downloadedModels.contains(targetLang.bcpCode)) {
       dev.log("Models missing offline. Passing through raw text.", name: "TranslationService");
       return text;
     }
 
-    _debounceTimer?.cancel();
+    try {
+      final translator = await _getTranslator(sourceLang, targetLang);
+      final result = await translator.translateText(text);
 
-    if (_activeCompleter != null && !_activeCompleter!.isCompleted) {
-      _activeCompleter!.complete(_lastOutput.isNotEmpty ? _lastOutput : text);
+      _lastInput = text;
+      _lastOutput = result;
+
+      return result;
+    } catch (e) {
+      dev.log("Translation error", name: "TranslationService", error: e);
+      return text;
     }
-
-    final completer = Completer<String>();
-    _activeCompleter = completer;
-
-    _debounceTimer = Timer(const Duration(milliseconds: 250), () async {
-      try {
-        final translator = await _getTranslator(sourceLang, targetLang);
-        final result = await translator.translateText(text);
-
-        _lastInput = text;
-        _lastOutput = result;
-
-        if (!completer.isCompleted) completer.complete(result);
-      } catch (e) {
-        dev.log("Translation error", name: "TranslationService", error: e);
-        if (!completer.isCompleted) completer.complete(text);
-      }
-    });
-
-    return completer.future;
   }
 
   void resetCache() {
     _lastInput = "";
     _lastOutput = "";
-    _debounceTimer?.cancel();
-    if (_activeCompleter != null && !_activeCompleter!.isCompleted) {
-      _activeCompleter!.complete("");
-    }
   }
 
   Future<void> reloadPreferences() async {
     final prefs = await DatabaseHelper.instance.getPreferences();
     _sourcePref = prefs.sourceLanguageCode;
     _targetPref = prefs.targetLanguageCode;
-    dev.log("Translation preferences instantly updated: $_sourcePref -> $_targetPref", name: "TranslationService");
+    dev.log("Translation preferences updated: $_sourcePref -> $_targetPref", name: "TranslationService");
   }
 
   @override
   void dispose() {
-    _debounceTimer?.cancel();
-    if (_activeCompleter != null && !_activeCompleter!.isCompleted) {
-      _activeCompleter!.complete("");
-    }
     for (final translator in _translatorCache.values) {
       translator.close();
     }

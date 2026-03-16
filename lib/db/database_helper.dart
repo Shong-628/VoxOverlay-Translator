@@ -52,7 +52,7 @@ class DatabaseHelper {
     } else {
       // Create defaults
       final defaultPrefs = UserPreference(
-        sourceLanguageCode: 'en',
+        sourceLanguageCode: 'English',
         targetLanguageCode: 'None',
         fontSizeScale: 18.0,
         overlayOpacity: 80,

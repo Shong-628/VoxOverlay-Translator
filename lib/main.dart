@@ -25,6 +25,7 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 @pragma("vm:entry-point")
 void overlayMain() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
     home: OverlayApp(),
@@ -108,6 +109,12 @@ class _AppInitializerState extends State<AppInitializer> {
   void _executeAction(String action) {
     debugPrint("🟢 EXECUTING ACTION: $action");
     switch (action) {
+      case 'overlay_ready':
+      // 4. ADDED: Catch the direct ping and forward it to OverlayService
+      // This immediately cancels the 4-second timeout wait.
+        OverlayService.handleSystemMessage({'status': 'ready'});
+        break;
+
       case 'toggle':
         _audioPipeline.togglePipeline();
         break;

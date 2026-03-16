@@ -11,6 +11,10 @@ class OverlayService {
   // Use the exact same size as _kCollapsedSize in floating_bubble.dart
   static const int _initialSize = 100;
 
+  // UI Spam Protection (Throttle)
+  static DateTime? _lastSubtitleUpdate;
+  static const int _throttleMilliseconds = 300; // Limits updates to ~3 times per second
+
   static void handleSystemMessage(dynamic data) {
     if (data is Map && data['status'] == 'ready') {
       if (_overlayReadyCompleter != null && !_overlayReadyCompleter!.isCompleted) {
@@ -45,8 +49,8 @@ class OverlayService {
       // Reset completer for a fresh start
       _overlayReadyCompleter = Completer<bool>();
 
-      // FIX 1: Start exactly at the collapsed bubble size. 
-      // This prevents the WindowManager from drawing a massive invisible box 
+      // FIX 1: Start exactly at the collapsed bubble size.
+      // This prevents the WindowManager from drawing a massive invisible box
       // or clipping the view into a half-circle.
       await FlutterOverlayWindow.showOverlay(
         height: _initialSize,
@@ -95,9 +99,21 @@ class OverlayService {
 
   static Future<void> showSubtitle(String text) async {
     if (text.trim().isEmpty) return;
+
+    // UI Spam Protection (Throttle)
+    final now = DateTime.now();
+    if (_lastSubtitleUpdate != null &&
+        now.difference(_lastSubtitleUpdate!).inMilliseconds < _throttleMilliseconds) {
+      dev.log("Skipped subtitle update (throttled): $text", name: 'OverlayService');
+      return;
+    }
+
     try {
       if (!await FlutterOverlayWindow.isActive()) return;
+
+      _lastSubtitleUpdate = now;
       await FlutterOverlayWindow.shareData(text);
+
     } catch (e) {
       dev.log("Error updating subtitle", name: 'OverlayService', error: e);
     }
