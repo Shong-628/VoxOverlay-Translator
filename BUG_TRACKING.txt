@@ -16,4 +16,12 @@ STATUS: RESOLVED
 
 ISSUE #5:
 missing overlay on 2nd start
+STATUS: RESOLVED
+
+ISSUE #6:
+first startup to allow display over other apps will cause it to get stuck at loading
+STATUS:
+
+ISSUE #6:
+survival outside of app focus not tested (potential crash)
 STATUS:
