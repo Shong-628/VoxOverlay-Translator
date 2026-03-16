@@ -1,11 +1,19 @@
 ISSUE #1:
 overlay buttons doesn't work
+STATUS: RESOLVED
 
 ISSUE #2:
 Renderflex overflow for subtitles
+STATUS: RESOLVED
 
 ISSUE #3:
 transcription only works after pause in voice
+STATUS: RESOLVED AS INTENDED WORKING
 
 ISSUE #4:
 changing of translate to language doesn't update
+STATUS: RESOLVED
+
+ISSUE #5:
+missing overlay on 2nd start
+STATUS:
