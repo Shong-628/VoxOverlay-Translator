@@ -20,6 +20,8 @@ class _OverlayAppState extends State<OverlayApp> with WidgetsBindingObserver {
   bool _isRunning = false;
   bool _isPaused = false;
 
+  int _bootCount = 0; //
+
   @override
   void initState() {
     super.initState();
@@ -33,7 +35,10 @@ class _OverlayAppState extends State<OverlayApp> with WidgetsBindingObserver {
         final type = data['type'];
 
         if (type == 'wake_up') {
-          setState(() => subtitle = "");
+          setState(() {
+            subtitle = "";
+            _bootCount++;
+          });
           _sendReadyPing();
         }
         else if (type == 'status_update') {
@@ -124,6 +129,7 @@ class _OverlayAppState extends State<OverlayApp> with WidgetsBindingObserver {
     }
 
     return FloatingBubble(
+      key: ValueKey(_bootCount),
       text: subtitle,
       prefs: _currentPrefs!,
       isRunning: _isRunning,

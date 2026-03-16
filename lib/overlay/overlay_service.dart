@@ -57,6 +57,8 @@ class OverlayService {
         alignment: OverlayAlignment.center,
         flag: OverlayFlag.defaultFlag,
         enableDrag: true,
+        visibility: NotificationVisibility.visibilityPublic,
+        positionGravity: PositionGravity.auto,
       );
 
       // Send a WAKE UP ping. If the engine is a "Zombie",

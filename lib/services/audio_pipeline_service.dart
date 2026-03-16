@@ -208,8 +208,14 @@ class AudioPipelineService extends ChangeNotifier {
     if (!_running || _isTransitioning) return;
 
     _isTransitioning = true;
-    _running = false;
 
+    // 1. INSTANT UI UPDATE: Flip state and notify immediately
+    _running = false;
+    _isPaused = false;
+    OverlayService.syncPipelineStatus(isRunning: false, isPaused: false);
+    notifyListeners();
+
+    // 2. HEAVY LIFTING: Now do the async cleanup
     try {
       await _audioStreamSubscription?.cancel();
       await _recorder.stop();
@@ -219,9 +225,6 @@ class AudioPipelineService extends ChangeNotifier {
       _lastSubtitle = "";
       _isProcessing = false;
       _translationService.resetCache();
-
-      OverlayService.syncPipelineStatus(isRunning: false, isPaused: false);
-      notifyListeners();
     } catch (e) {
       dev.log("Error stopping pipeline", name: 'AudioPipeline', error: e);
     } finally {

@@ -62,8 +62,10 @@ class _HomeScreenState extends State<HomeScreen> {
         }
 
         if (micStatus.isGranted) {
-          await service.startPipeline();
           await OverlayService.startOverlay();
+          debugPrint("Home: Starting Overlay");
+          await service.startPipeline();
+          debugPrint("Home: Starting Pipeline");
         } else {
           if (!mounted) return; // Safety check after await
 

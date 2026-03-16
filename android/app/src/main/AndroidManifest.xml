@@ -3,8 +3,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
-
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:label="VoxOverlay Translator"
@@ -18,8 +19,12 @@
             android:value="Displays floating translation subtitles over other apps" />
 
         <meta-data
-            android:name="io.flutter.app.android.EnableImpeller"
+            android:name="io.flutter.embedding.android.EnableImpeller"
             android:value="false" />
+
+        <meta-data
+            android:name="flutter.embedding.android.FlutterEngineArgs"
+            android:value="--enable-impeller=false" />
 
         <meta-data
             android:name="io.flutter.app.android.WideColorGamut"
@@ -39,11 +44,6 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
-            
-            <!-- Disable Impeller for this specific hardware to fix Gralloc failures -->
-            <meta-data
-                android:name="io.flutter.embedding.android.EnableImpeller"
-                android:value="false" />
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
