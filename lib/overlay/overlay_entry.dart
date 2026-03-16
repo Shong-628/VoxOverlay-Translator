@@ -24,10 +24,10 @@ class _OverlayAppState extends State<OverlayApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    // ADDED: Register the observer
+    // Register the observer
     WidgetsBinding.instance.addObserver(this);
 
-    // 2. ADDED: Fetch preferences directly from the DB on boot.
+    // Fetch preferences directly from the DB on boot.
     _loadPreferencesDirectly();
 
     FlutterOverlayWindow.overlayListener.listen((data) {
@@ -36,7 +36,12 @@ class _OverlayAppState extends State<OverlayApp> with WidgetsBindingObserver {
       if (data is Map) {
         final type = data['type'];
 
-        if (type == 'status_update') {
+        // Catch the wake_up ping from the Main App
+        if (type == 'wake_up') {
+          setState(() => subtitle = ""); // Clear old text on restart
+          _sendReadyPing();
+        }
+        else if (type == 'status_update') {
           setState(() {
             _isRunning = data['isRunning'] ?? false;
             _isPaused = data['isPaused'] ?? false;
@@ -59,14 +64,14 @@ class _OverlayAppState extends State<OverlayApp> with WidgetsBindingObserver {
     });
   }
 
-  // ADDED: Clean up the observer
+  // Clean up the observer
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  // ADDED: Fire the ping when waking up from a Zombie state!
+  // Fire the ping when waking up from a Zombie state
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
@@ -76,7 +81,7 @@ class _OverlayAppState extends State<OverlayApp> with WidgetsBindingObserver {
 
   // Helper method extracted for reuse
   void _sendReadyPing() {
-    // 3. FIXED: SendPort (from dart:isolate), IsolateNameServer (from dart:ui)
+    // 3. SendPort (from dart:isolate), IsolateNameServer (from dart:ui)
     final SendPort? sendPort = ui.IsolateNameServer.lookupPortByName('vox_overlay_port');
     sendPort?.send("ACTION_PREFIX:overlay_ready");
 

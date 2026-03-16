@@ -80,6 +80,7 @@ class _HomeScreenState extends State<HomeScreen> {
         // Stopping
         await service.stopPipeline();
         await OverlayService.stopOverlay();
+        debugPrint("Home: Stopping Pipeline");
       }
     } catch (e) {
       debugPrint("Error toggling pipeline: $e");

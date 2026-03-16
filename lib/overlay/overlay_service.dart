@@ -32,6 +32,8 @@ class OverlayService {
     await FlutterOverlayWindow.requestPermission();
   }
 
+  // ... (keep existing imports and top half of the file)
+
   static Future<void> startOverlay() async {
     try {
       bool permission = await hasPermission();
@@ -40,8 +42,6 @@ class OverlayService {
         if (!await hasPermission()) return;
       }
 
-      // FIX: Bypass the "Zombie" state. If the plugin thinks it's active
-      // when we are trying to start it, aggressively shut it down first.
       bool isActive = await FlutterOverlayWindow.isActive();
       if (isActive) {
         dev.log("Overlay thinks it's active. Forcing cleanup...", name: 'OverlayService');
@@ -49,12 +49,8 @@ class OverlayService {
         await Future.delayed(const Duration(milliseconds: 300));
       }
 
-      // Reset completer for a fresh start
       _overlayReadyCompleter = Completer<bool>();
 
-      // FIX 1: Start exactly at the collapsed bubble size.
-      // This prevents the WindowManager from drawing a massive invisible box
-      // or clipping the view into a half-circle.
       await FlutterOverlayWindow.showOverlay(
         height: _initialSize,
         width: _initialSize,
@@ -63,14 +59,16 @@ class OverlayService {
         enableDrag: true,
       );
 
-      // FIX 2: Wait for the engine to boot, but handle timeouts gracefully
+      // Send a WAKE UP ping. If the engine is a "Zombie",
+      // initState() won't fire. This ping forces the overlay to acknowledge us.
+      await FlutterOverlayWindow.shareData({'type': 'wake_up'});
+
       try {
         await _overlayReadyCompleter!.future.timeout(const Duration(seconds: 4));
       } catch (e) {
         dev.log("Timeout waiting for overlay ready ping. Proceeding anyway.", name: 'OverlayService');
       }
 
-      // Sync initial data only AFTER the window is attached
       final prefs = await DatabaseHelper.instance.getPreferences();
       await FlutterOverlayWindow.shareData(prefs.toMap());
 

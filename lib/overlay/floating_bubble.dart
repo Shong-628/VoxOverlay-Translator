@@ -181,7 +181,8 @@ class _FloatingBubbleState extends State<FloatingBubble> with WidgetsBindingObse
     // 2. Fallback channel just in case
     FlutterOverlayWindow.shareData(payload);
 
-    if (action == 'close' || action == 'settings') {
+    // Causes race condition between windows closing and resize if "close" calls _collapseMenu()
+    if (action == 'settings') {
       _collapseMenu();
     } else if (action == 'toggle') {
       setState(() => _isLocallyPlaying = !_isLocallyPlaying);
