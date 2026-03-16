@@ -213,7 +213,7 @@ class _FloatingBubbleState extends State<FloatingBubble> with WidgetsBindingObse
     final currentWidth = _expanded ? _kExpandedSize : (widget.text.trim().isNotEmpty ? logicalWidth : _kCollapsedSize);
 
     return Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: Colors.black.withValues(alpha: 0.01),
       body: SizedBox(
         width: currentWidth,
         child: Align(
@@ -251,7 +251,7 @@ class _FloatingBubbleState extends State<FloatingBubble> with WidgetsBindingObse
               width: _kBubbleRadius * 2,
               height: _kBubbleRadius * 2,
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.9),
+                color: Colors.black.withValues(alpha: 0.9),
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white24, width: 2),
               ),
@@ -319,7 +319,7 @@ class _FloatingBubbleState extends State<FloatingBubble> with WidgetsBindingObse
           constraints: BoxConstraints(maxWidth: maxWidth),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: bgColor.withOpacity(widget.prefs.overlayOpacity / 100.0),
+            color: bgColor.withValues(alpha: widget.prefs.overlayOpacity / 100.0),
             borderRadius: BorderRadius.circular(4),
           ),
           child: Text(

@@ -209,7 +209,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: _hexToColor(bgColorHex).withOpacity(opacity / 100.0),
+                color: _hexToColor(bgColorHex).withValues(alpha: opacity / 100.0),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(

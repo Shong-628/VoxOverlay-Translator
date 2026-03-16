@@ -323,9 +323,9 @@ class _WhisperTestWidgetState extends State<WhisperTestWidget> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.blueGrey.withOpacity(0.05),
+        color: Colors.blueGrey.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.blueGrey.withOpacity(0.2)),
+        border: Border.all(color: Colors.blueGrey.withValues(alpha: 0.2)),
       ),
       child: Column(
         children: [
@@ -375,9 +375,9 @@ class _WhisperTestWidgetState extends State<WhisperTestWidget> {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.03),
+        color: Colors.black.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.withOpacity(0.4)),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.4)),
       ),
       child: _transcripts.isEmpty
           ? Center(

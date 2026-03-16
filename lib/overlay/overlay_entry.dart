@@ -13,7 +13,6 @@ class OverlayApp extends StatefulWidget {
   State<OverlayApp> createState() => _OverlayAppState();
 }
 
-// ADDED: with WidgetsBindingObserver to catch Zombie wakeups
 class _OverlayAppState extends State<OverlayApp> with WidgetsBindingObserver {
   String subtitle = "";
   UserPreference? _currentPrefs;
@@ -24,10 +23,7 @@ class _OverlayAppState extends State<OverlayApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    // Register the observer
     WidgetsBinding.instance.addObserver(this);
-
-    // Fetch preferences directly from the DB on boot.
     _loadPreferencesDirectly();
 
     FlutterOverlayWindow.overlayListener.listen((data) {
@@ -36,9 +32,8 @@ class _OverlayAppState extends State<OverlayApp> with WidgetsBindingObserver {
       if (data is Map) {
         final type = data['type'];
 
-        // Catch the wake_up ping from the Main App
         if (type == 'wake_up') {
-          setState(() => subtitle = ""); // Clear old text on restart
+          setState(() => subtitle = "");
           _sendReadyPing();
         }
         else if (type == 'status_update') {
@@ -64,14 +59,12 @@ class _OverlayAppState extends State<OverlayApp> with WidgetsBindingObserver {
     });
   }
 
-  // Clean up the observer
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  // Fire the ping when waking up from a Zombie state
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
@@ -79,17 +72,12 @@ class _OverlayAppState extends State<OverlayApp> with WidgetsBindingObserver {
     }
   }
 
-  // Helper method extracted for reuse
   void _sendReadyPing() {
-    // 3. SendPort (from dart:isolate), IsolateNameServer (from dart:ui)
     final SendPort? sendPort = ui.IsolateNameServer.lookupPortByName('vox_overlay_port');
     sendPort?.send("ACTION_PREFIX:overlay_ready");
-
-    // Keep the original as a fallback
     FlutterOverlayWindow.shareData({"status": "ready"});
   }
 
-  // Helper method to load prefs from SQLite
   Future<void> _loadPreferencesDirectly() async {
     try {
       final prefs = await DatabaseHelper.instance.getPreferences();
@@ -104,11 +92,33 @@ class _OverlayAppState extends State<OverlayApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     if (_currentPrefs == null) {
-      return const Scaffold(
-        backgroundColor: Colors.transparent,
+      // 🟢 THE FIX: The "Visible" Waiting Room.
+      // We mimic the exact look of the closed FloatingBubble so Android
+      // allocates a real GraphicBuffer on Frame 1, preventing the 4x4 crash.
+      return Scaffold(
+        backgroundColor: Colors.black.withValues(alpha: 0.01),
         body: SizedBox(
-          width: 100,
+          width: 100, // Matches _kCollapsedSize in floating_bubble
           height: 100,
+          child: Center(
+            child: Container(
+              width: 60, // Matches _kBubbleRadius * 2
+              height: 60,
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.9),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white24, width: 2),
+              ),
+              child: Center(
+                child: Image.asset(
+                  'assets/icon/icon.png',
+                  width: 28,
+                  height: 28,
+                  errorBuilder: (_, __, ___) => const Icon(Icons.mic, color: Colors.white, size: 28),
+                ),
+              ),
+            ),
+          ),
         ),
       );
     }
