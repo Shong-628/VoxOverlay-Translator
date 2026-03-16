@@ -40,10 +40,13 @@ class OverlayService {
         if (!await hasPermission()) return;
       }
 
+      // FIX: Bypass the "Zombie" state. If the plugin thinks it's active
+      // when we are trying to start it, aggressively shut it down first.
       bool isActive = await FlutterOverlayWindow.isActive();
       if (isActive) {
-        dev.log("Overlay is already active.", name: 'OverlayService');
-        return;
+        dev.log("Overlay thinks it's active. Forcing cleanup...", name: 'OverlayService');
+        await FlutterOverlayWindow.closeOverlay();
+        await Future.delayed(const Duration(milliseconds: 300));
       }
 
       // Reset completer for a fresh start

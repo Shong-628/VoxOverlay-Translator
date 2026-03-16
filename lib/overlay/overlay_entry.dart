@@ -13,7 +13,8 @@ class OverlayApp extends StatefulWidget {
   State<OverlayApp> createState() => _OverlayAppState();
 }
 
-class _OverlayAppState extends State<OverlayApp> {
+// ADDED: with WidgetsBindingObserver to catch Zombie wakeups
+class _OverlayAppState extends State<OverlayApp> with WidgetsBindingObserver {
   String subtitle = "";
   UserPreference? _currentPrefs;
 
@@ -23,6 +24,8 @@ class _OverlayAppState extends State<OverlayApp> {
   @override
   void initState() {
     super.initState();
+    // ADDED: Register the observer
+    WidgetsBinding.instance.addObserver(this);
 
     // 2. ADDED: Fetch preferences directly from the DB on boot.
     _loadPreferencesDirectly();
@@ -52,13 +55,33 @@ class _OverlayAppState extends State<OverlayApp> {
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // 3. FIXED: SendPort (from dart:isolate), IsolateNameServer (from dart:ui)
-      final SendPort? sendPort = ui.IsolateNameServer.lookupPortByName('vox_overlay_port');
-      sendPort?.send("ACTION_PREFIX:overlay_ready");
-
-      // Keep the original as a fallback
-      FlutterOverlayWindow.shareData({"status": "ready"});
+      _sendReadyPing();
     });
+  }
+
+  // ADDED: Clean up the observer
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // ADDED: Fire the ping when waking up from a Zombie state!
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _sendReadyPing();
+    }
+  }
+
+  // Helper method extracted for reuse
+  void _sendReadyPing() {
+    // 3. FIXED: SendPort (from dart:isolate), IsolateNameServer (from dart:ui)
+    final SendPort? sendPort = ui.IsolateNameServer.lookupPortByName('vox_overlay_port');
+    sendPort?.send("ACTION_PREFIX:overlay_ready");
+
+    // Keep the original as a fallback
+    FlutterOverlayWindow.shareData({"status": "ready"});
   }
 
   // Helper method to load prefs from SQLite

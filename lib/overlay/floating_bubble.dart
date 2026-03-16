@@ -46,7 +46,8 @@ class FloatingBubble extends StatefulWidget {
   State<FloatingBubble> createState() => _FloatingBubbleState();
 }
 
-class _FloatingBubbleState extends State<FloatingBubble> {
+// with WidgetsBindingObserver to catch Zombie wakeups
+class _FloatingBubbleState extends State<FloatingBubble> with WidgetsBindingObserver {
   bool _expanded = false;
   bool _isResizing = false;
   bool _resizeQueued = false;
@@ -57,6 +58,9 @@ class _FloatingBubbleState extends State<FloatingBubble> {
   @override
   void initState() {
     super.initState();
+    // Register the observer
+    WidgetsBinding.instance.addObserver(this);
+
     _isLocallyPlaying = widget.isRunning && !widget.isPaused;
 
     // FIX: Delay the initial resize by 150ms to ensure Android WindowManager
@@ -64,6 +68,23 @@ class _FloatingBubbleState extends State<FloatingBubble> {
     Future.delayed(const Duration(milliseconds: 150), () {
       if (mounted) _updateWindowSize(force: true);
     });
+  }
+
+  // Clean up the observer
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // Force a resize when waking up from a Zombie state!
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      Future.delayed(const Duration(milliseconds: 150), () {
+        if (mounted) _updateWindowSize(force: true);
+      });
+    }
   }
 
   @override
