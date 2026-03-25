@@ -15,22 +15,22 @@ class AppLocalizationsMs extends AppLocalizations {
   String get language => 'Bahasa';
 
   @override
-  String get sourceLanguage => 'Bahasa Sumber';
+  String get sourceLanguage => 'Bahasa Asal';
 
   @override
   String get targetLanguage => 'Bahasa Sasaran';
 
   @override
-  String get subtitlePreview => 'Pratonton Sarikata';
+  String get subtitlePreview => 'Pratonton Sari Kata';
 
   @override
-  String get appearance => 'Penampilan';
+  String get appearance => 'Paparan';
 
   @override
-  String get fontSize => 'Saiz Fon';
+  String get fontSize => 'Saiz Teks';
 
   @override
-  String get backgroundOpacity => 'Ketelusan Latar';
+  String get backgroundOpacity => 'Ketelusan Latar Belakang';
 
   @override
   String get textColor => 'Warna Teks';
@@ -42,7 +42,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get generalSettings => 'Tetapan Umum';
 
   @override
-  String get appDisplayLanguage => 'Bahasa Paparan Aplikasi';
+  String get appDisplayLanguage => 'Bahasa Aplikasi';
 
   @override
   String get darkMode => 'Mod Gelap';
