@@ -11,7 +11,7 @@ class MainActivity: FlutterFragmentActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        // Listen for messages from your Dart NativeWindowService
+        // Listen for messages from Dart NativeWindowService
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             if (call.method == "bringToForeground") {
                 bringAppToFront()

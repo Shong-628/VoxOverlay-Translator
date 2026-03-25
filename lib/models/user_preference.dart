@@ -1,7 +1,7 @@
 class UserPreference {
   final int? prefId;
-  final String sourceLanguageCode;   // new field
-  final String targetLanguageCode;   // new field
+  final String sourceLanguageCode;
+  final String targetLanguageCode;
   final double fontSizeScale;
   final int overlayOpacity;
   final String textColorHex;
@@ -47,7 +47,7 @@ class UserPreference {
       sourceLanguageCode: map['source_language_code'],
       targetLanguageCode: map['target_language_code'],
 
-      // FIX: Safely parse as num first, then convert to double.
+      // Safely parse as num first, then convert to double.
       // Added a fallback of 14.0 just in case the value is completely missing.
       fontSizeScale: (map['font_size_scale'] as num?)?.toDouble() ?? 14.0,
       overlayOpacity: (map['overlay_opacity'] as num?)?.toInt() ?? 100,

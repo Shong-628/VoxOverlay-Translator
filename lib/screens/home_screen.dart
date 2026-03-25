@@ -213,7 +213,7 @@ class _HomeScreenState extends State<HomeScreen> {
               // Main Action Button
               _StartStopButton(
                 isRunning: pipeline.isRunning,
-                isPaused: pipeline.isPaused, // <-- Add this
+                isPaused: pipeline.isPaused,
                 isLoading: _isToggling, // Pass the lock state
                 onPressed: () => _handleTogglePipeline(pipeline),
               ),
@@ -267,7 +267,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 child: const Column(
                   children: [
-                    TranslationTestWidget(), // <-- Added Translation Test
+                    TranslationTestWidget(),
                     SizedBox(height: 10),
                   ],
                 ),
@@ -376,13 +376,13 @@ class _StatusCard extends StatelessWidget {
 class _StartStopButton extends StatelessWidget {
   final bool isRunning;
   final bool isPaused;
-  final bool isLoading; // <-- Add this
+  final bool isLoading;
   final VoidCallback onPressed;
 
   const _StartStopButton({
     required this.isRunning,
     required this.isPaused,
-    required this.isLoading, // <-- Add this
+    required this.isLoading,
     required this.onPressed
   });
 
@@ -390,7 +390,7 @@ class _StartStopButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    // If running but paused, let's show an orange/amber theme. Otherwise red for Stop, primary for Start.
+    // If running but paused, show an orange/amber theme. Otherwise red for Stop, primary for Start.
     Color buttonColor = !isRunning
         ? colorScheme.primaryContainer
         : (isPaused ? Colors.orange.shade200 : colorScheme.errorContainer);

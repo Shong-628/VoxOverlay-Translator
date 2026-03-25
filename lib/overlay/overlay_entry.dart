@@ -97,8 +97,6 @@ class _OverlayAppState extends State<OverlayApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     if (_currentPrefs == null) {
-      // 🟢 THE FIX: The "Visible" Waiting Room.
-      // We mimic the exact look of the closed FloatingBubble so Android
       // allocates a real GraphicBuffer on Frame 1, preventing the 4x4 crash.
       return Scaffold(
         backgroundColor: Colors.black.withValues(alpha: 0.01),

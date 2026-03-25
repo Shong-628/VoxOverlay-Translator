@@ -13,7 +13,8 @@ class OverlayService {
 
   // UI Spam Protection (Throttle)
   static DateTime? _lastSubtitleUpdate;
-  static const int _throttleMilliseconds = 300; // Limits updates to ~3 times per second
+  static const int _throttleMilliseconds = 300;
+  // Limits updates to ~3 times per second
 
   static void handleSystemMessage(dynamic data) {
     if (data is Map && data['status'] == 'ready') {
@@ -31,8 +32,6 @@ class OverlayService {
   static Future<void> requestPermission() async {
     await FlutterOverlayWindow.requestPermission();
   }
-
-  // ... (keep existing imports and top half of the file)
 
   static Future<void> startOverlay() async {
     try {
@@ -85,7 +84,7 @@ class OverlayService {
 
       await FlutterOverlayWindow.closeOverlay();
 
-      // FIX 3: Add a tiny delay to let the OS fully destroy the background surface.
+      // Add a tiny delay to let the OS fully destroy the background surface.
       // This prevents "Zombie" isolates if the user immediately restarts the overlay.
       await Future.delayed(const Duration(milliseconds: 300));
 

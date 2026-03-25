@@ -19,7 +19,7 @@ class TranslationService extends ChangeNotifier {
   bool _isInitialized = false;
   bool get isInitialized => _isInitialized;
 
-  // FIX 1: Map the strings to their ML Kit Enums BEFORE checking if they match.
+  // Map the strings to their ML Kit Enums BEFORE checking if they match.
   // This ensures 'ms' and 'malay' are correctly recognized as the same language.
   bool get bypassTranslation {
     if (_targetPref.toLowerCase() == 'none') return true;
@@ -123,7 +123,7 @@ class TranslationService extends ChangeNotifier {
     final sourceLang = _mapLanguage(_sourcePref);
     final targetLang = _mapLanguage(_targetPref);
 
-    // FIX 2: Absolute safety net. Under no circumstances should we allow ML Kit
+    // Absolute safety net. Under no circumstances should we allow ML Kit
     // to process identical source and target enums, as it causes native thread hangs.
     if (sourceLang == targetLang) {
       return text;

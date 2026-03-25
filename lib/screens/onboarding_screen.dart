@@ -22,12 +22,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     },
     {
       "title": "Screen Recording Permission",
-      "desc": "The app requires MediaProjection permission to capture audio from the device speaker. All processing is done locally.",
+      "desc": "The app requires Audio permission to capture audio from the device speaker. All processing is done locally.",
       "icon": "🛡️",
     },
     {
       "title": "Floating Overlay",
-      "desc": "The translation will appear in a floating overlay. You can drag or hide the overlay anytime.",
+      "desc": "The translation will appear in a floating overlay. You can drag or hide the overlay anytime. The app requires permission to Display over other app",
       "icon": "☁️",
     },
     {
@@ -157,7 +157,6 @@ class OnboardingSlide extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // This grabs the appropriate text color for the current background
     final Color textColor = Theme.of(context).colorScheme.onSurface;
 
     return Padding(

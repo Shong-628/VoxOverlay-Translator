@@ -16,7 +16,7 @@ struct whisper_context* bridge_whisper_init(const char* model_path) {
 }
 
 // 2. Transcribe and return text safely
-// NEW: Added const char* language parameter to match Dart FFI
+// Added const char* language parameter to match Dart FFI
 __attribute__((visibility("default"))) __attribute__((used))
 const char* bridge_whisper_transcribe(struct whisper_context* ctx, float* pcmf32, int n_samples, const char* language) {
     if (ctx == nullptr) return nullptr; // Return null instead of "" for safety
@@ -26,10 +26,10 @@ const char* bridge_whisper_transcribe(struct whisper_context* ctx, float* pcmf32
     wparams.print_timestamps = false;
     wparams.single_segment = true;
 
-    // NEW: Dynamically assign the language passed from Dart
+    // Dynamically assign the language passed from Dart
     wparams.language = language;
 
-    // NEW: Explicitly disable Whisper's built-in translation to English.
+    // Explicitly disable Whisper's built-in translation to English.
     // This ensures we get the raw Malay/Chinese text to feed into ML Kit later.
     wparams.translate = false;
 

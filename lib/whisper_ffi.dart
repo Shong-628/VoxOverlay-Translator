@@ -9,7 +9,6 @@ import 'package:ffi/ffi.dart';
 typedef BridgeWhisperInitC = Pointer<Void> Function(Pointer<Utf8> modelPath);
 typedef BridgeWhisperInitDart = Pointer<Void> Function(Pointer<Utf8> modelPath);
 
-// NEW: Added Pointer<Utf8> language parameter to both signatures
 typedef BridgeWhisperTranscribeC = Pointer<Utf8> Function(Pointer<Void> ctx, Pointer<Float> pcmf32, Int32 n_samples, Pointer<Utf8> language);
 typedef BridgeWhisperTranscribeDart = Pointer<Utf8> Function(Pointer<Void> ctx, Pointer<Float> pcmf32, int n_samples, Pointer<Utf8> language);
 
@@ -44,7 +43,7 @@ class WhisperFFI {
     return _context != null && _context!.address != 0;
   }
 
-  // NEW: Added language parameter
+  // Added language parameter
   Future<String> transcribe(Float32List audioData, {String language = 'auto'}) async {
     if (_context == null || _context!.address == 0) return "";
 

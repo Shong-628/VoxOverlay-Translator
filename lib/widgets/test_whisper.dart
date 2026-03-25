@@ -148,7 +148,6 @@ class _WhisperTestWidgetState extends State<WhisperTestWidget> {
 
       // 4. If silent for too long, flush context to save processing power
       if (_isSilent) {
-        // FIX: Added 'await' here so it completes the final transcription before returning
         await _handleSilence();
         return;
       }
@@ -186,7 +185,7 @@ class _WhisperTestWidgetState extends State<WhisperTestWidget> {
   }
 
   List<double> _convertPcm16ToFloat32(Uint8List chunkBytes) {
-    // FIX: Using ByteData avoids memory alignment exceptions and endianness distortion
+    // Using ByteData avoids memory alignment exceptions and endianness distortion
     final floatList = <double>[];
     final byteData = ByteData.sublistView(chunkBytes);
 
@@ -307,7 +306,7 @@ class _WhisperTestWidgetState extends State<WhisperTestWidget> {
       children: const [
         Icon(Icons.monitor_heart, size: 24, color: Colors.deepPurple),
         SizedBox(width: 8),
-        // FIX: Wrapped in Flexible to prevent text overflow on small screens
+        // Wrapped in Flexible to prevent text overflow on small screens
         Flexible(
           child: Text(
             "Whisper Diagnostic Test",
@@ -332,14 +331,12 @@ class _WhisperTestWidgetState extends State<WhisperTestWidget> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // FIX: Wrapped in Expanded
               Expanded(
                 child: Text("RMS Vol: ${_currentRms.toStringAsFixed(4)}",
                     style: TextStyle(
                         color: _currentRms < _silenceThreshold ? Colors.grey : Colors.green,
                         fontWeight: FontWeight.bold)),
               ),
-              // FIX: Wrapped in Expanded
               Expanded(
                 child: Text("VAD: ${_isSilent ? 'SILENCE' : 'VOICE'}",
                     textAlign: TextAlign.right,
@@ -353,9 +350,7 @@ class _WhisperTestWidgetState extends State<WhisperTestWidget> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // FIX: Wrapped in Expanded
               Expanded(child: Text("Byte Buffer: ${_byteBuffer.length}")),
-              // FIX: Wrapped in Expanded
               Expanded(
                 child: Text(
                   "Context Window: ${(_contextBuffer.length / _sampleRate).toStringAsFixed(1)}s",
@@ -417,7 +412,7 @@ class _WhisperTestWidgetState extends State<WhisperTestWidget> {
           ),
           const SizedBox(width: 8),
         ],
-        // FIX: Wrapped in Flexible to prevent long error messages from breaking layout
+        // Wrapped in Flexible to prevent long error messages from breaking layout
         Flexible(
           child: Text(
             _statusMessage,

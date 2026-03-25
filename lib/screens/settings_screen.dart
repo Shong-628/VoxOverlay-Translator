@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 import '../db/database_helper.dart';
 import '../models/user_preference.dart';
 import '../services/settings_controller.dart';
-import '../services/translation_service.dart'; // Added translation service import
+import '../services/translation_service.dart';
 import '../extensions/context_extensions.dart';
 import '../overlay/overlay_service.dart';
 
@@ -66,7 +66,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() {
       _userPrefs = prefs;
-      // FIX: Sanitize the legacy "en", "ms", "zh" values
+      // Sanitize the legacy "en", "ms", "zh" values
       sourceLanguage = _normalizeLanguage(prefs.sourceLanguageCode);
       targetLanguage = _normalizeLanguage(prefs.targetLanguageCode);
 
@@ -79,7 +79,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appLanguage = sharedPrefs.getString('appLanguage') ?? "English";
     });
 
-    // Proactively update the database if we caught a legacy value
+    // Proactively update the database if caught a legacy value
     if (sourceLanguage != prefs.sourceLanguageCode ||
         targetLanguage != prefs.targetLanguageCode) {
       _updateDbPrefs();
@@ -109,7 +109,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await DatabaseHelper.instance.updatePreferences(updatedPrefs);
     _userPrefs = updatedPrefs;
 
-    // FIX: Update the translation service engine immediately
+    // Update the translation service engine immediately
     if (mounted) {
       await context.read<TranslationService>().reloadPreferences();
     }

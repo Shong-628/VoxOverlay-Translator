@@ -63,7 +63,7 @@ class _FloatingBubbleState extends State<FloatingBubble> with WidgetsBindingObse
 
     _isLocallyPlaying = widget.isRunning && !widget.isPaused;
 
-    // FIX: Delay the initial resize by 150ms to ensure Android WindowManager
+    // Delay the initial resize by 150ms to ensure Android WindowManager
     // has actually attached the surface. Fixes the "half circle" restart bug.
     Future.delayed(const Duration(milliseconds: 150), () {
       if (mounted) _updateWindowSize(force: true);
@@ -77,7 +77,7 @@ class _FloatingBubbleState extends State<FloatingBubble> with WidgetsBindingObse
     super.dispose();
   }
 
-  // Force a resize when waking up from a Zombie state!
+  // Force a resize when waking up from a Zombie state
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {

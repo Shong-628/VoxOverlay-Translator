@@ -8,7 +8,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:path_provider/path_provider.dart';
 import '../whisper_ffi.dart';
 
-/// A Singleton service managing the native Whisper C++ bindings.
+// A Singleton service managing the native Whisper C++ bindings.
 class WhisperService {
   static final WhisperService _instance = WhisperService._internal();
   factory WhisperService() => _instance;
@@ -20,8 +20,8 @@ class WhisperService {
   Future<void>? _initFuture;
   bool _isTranscribing = false;
 
-  /// Initializes the Whisper model safely.
-  /// Prevents concurrent initializations via `_initFuture`.
+  // Initializes the Whisper model safely.
+  // Prevents concurrent initializations via `_initFuture`.
   Future<void> initialize() {
     if (_initialized) return Future.value();
 
@@ -50,8 +50,8 @@ class WhisperService {
     }
   }
 
-  /// Copies the model from the bundle assets to the device's local filesystem.
-  /// C++ standard libraries (used by whisper.cpp) cannot read directly from Android/iOS asset bundles.
+  // Copies the model from the bundle assets to the device's local filesystem.
+  // C++ standard libraries (used by whisper.cpp) cannot read directly from Android/iOS asset bundles.
   Future<String> _ensureModelIsReady() async {
     final docDir = await getApplicationDocumentsDirectory();
     final modelFile = File('${docDir.path}/ggml-tiny.bin');
@@ -67,9 +67,9 @@ class WhisperService {
     return modelFile.path;
   }
 
-  /// Transcribes a raw Float32List containing 16kHz PCM audio data.
-  /// Locks concurrently to prevent C++ segmentation faults.
-  /// NEW: Added optional language parameter (defaults to auto-detect).
+  // Transcribes a raw Float32List containing 16kHz PCM audio data.
+  // Locks concurrently to prevent C++ segmentation faults.
+  // NAdded optional language parameter (defaults to auto-detect).
   Future<String> transcribe(Float32List audioFloats, {String language = 'auto'}) async {
     if (!_initialized) await initialize();
 
@@ -80,8 +80,7 @@ class WhisperService {
     String result = "";
 
     try {
-      // NEW: Pass the language down to the FFI layer.
-      // NOTE: Ensure your WhisperFFI wrapper actually accepts and uses this parameter!
+      // Pass the language down to the FFI layer.
       result = await _whisperFFI.transcribe(audioFloats, language: language);
     } catch (e) {
       dev.log("Native transcription error", name: 'WhisperService', error: e);
